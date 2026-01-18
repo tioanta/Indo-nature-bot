@@ -1,0 +1,32 @@
+name: Daily Saudi Nature Uploader
+
+on:
+  schedule:
+    # Jalan setiap hari jam 09:00 UTC (sekitar jam 16:00 WIB)
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Agar bisa ditrigger manual buat tes
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          # Install ImageMagick untuk MoviePy (opsional tapi disarankan)
+          sudo apt-get install imagemagick
+
+      - name: Run Auto Uploader
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+        run: python main.py
