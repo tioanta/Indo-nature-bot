@@ -6,7 +6,7 @@ import json
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-def get_pexels_video(query="Saudi Arabia nature", orientation="portrait"):
+def get_pexels_video(query="India People and Nature", orientation="portrait"):
     headers = {"Authorization": PEXELS_API_KEY}
     # Cari video (ambil 1 random dari 15 hasil teratas)
     url = f"https://api.pexels.com/videos/search?query={query}&per_page=15&orientation={orientation}"
