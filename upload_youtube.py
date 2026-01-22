@@ -7,101 +7,64 @@ from googleapiclient.http import MediaFileUpload
 
 def generate_ai_caption(topic):
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return f"Amazing View: {topic} 🌍 #Shorts", f"Beautiful nature scenery in {topic}. #Travel"
+    if not api_key: return "Video Shorts", "#Shorts"
         
     genai.configure(api_key=api_key)
     
-    # --- BAGIAN BARU: AUTO-DETECT MODEL ---
-    print("   🤖 Sedang mencari model AI yang tersedia...")
-    chosen_model = None
+    # PROMPT CERDAS YANG BISA BERUBAH PERAN
+    prompt = f"""
+    Kamu adalah Content Creator YouTube profesional.
+    Topik video hari ini adalah: "{topic}".
     
+    Tugas: Buatkan Judul dan Deskripsi Shorts.
+    
+    PERAN KAMU (Sesuaikan dengan topik):
+    - Jika topik tentang ALAM: Jadilah Travel Vlogger yang puitis.
+    - Jika topik tentang ANIME/JEPANG: Jadilah 'Otaku' yang antusias, gunakan istilah wibu jika perlu.
+    - Jika topik tentang SEPAKBOLA: Jadilah Komentator Bola yang penuh semangat dan hype.
+    
+    Format Output JSON: {{"title": "...", "description": "..."}}
+    Syarat Judul: Clickbait, Max 60 karakter, Ada Emoji.
+    Syarat Deskripsi: 2 kalimat seru + 3 hashtag relevan.
+    """
+    
+    # Auto-Detect Model (Flash -> Pro)
+    chosen_model = 'gemini-1.5-flash'
     try:
-        # Minta daftar semua model yang tersedia di akun ini
-        for m in genai.list_models():
-            # Cari model yang bisa 'generateContent'
-            if 'generateContent' in m.supported_generation_methods:
-                # Prioritaskan model 'flash' (cepat) atau 'pro'
-                if 'flash' in m.name:
-                    chosen_model = m.name
-                    break
-                elif 'pro' in m.name and not chosen_model:
-                    chosen_model = m.name
-        
-        # Jika loop selesai tapi belum dapet yang flash/pro, ambil apa saja yg pertama
-        if not chosen_model:
-             for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    chosen_model = m.name
-                    break
-                    
-        if chosen_model:
-            print(f"   ✅ Model ditemukan: {chosen_model}")
-        else:
-            raise Exception("Tidak ada model AI yang aktif di akun ini.")
+        genai.GenerativeModel(chosen_model).generate_content("test")
+    except:
+        chosen_model = 'gemini-pro'
 
-        # --- MULAI GENERATE ---
+    try:
         model = genai.GenerativeModel(chosen_model)
-        
-        prompt = f"""
-        Kamu adalah Travel Influencer.
-        Buatkan Judul dan Deskripsi YouTube Shorts tentang: {topic}.
-        
-        Aturan:
-        1. Judul: Clickbait, Max 60 char, Emoji Bendera Negara.
-        2. Deskripsi: 2 kalimat memuji keindahan.
-        3. Hashtags: 3-5 tags relevan.
-        4. Output WAJIB JSON murni: {{"title": "...", "description": "..."}}
-        """
-        
         response = model.generate_content(prompt)
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_text)
-        
+        data = json.loads(response.text.replace("```json", "").replace("```", "").strip())
         return data['title'], data['description']
-
     except Exception as e:
-        print(f"   ⚠️ Gagal Generate AI: {e}")
-        print("   -> Menggunakan caption manual cadangan.")
-        return f"Wanderlust: {topic} ✈️ #Shorts", f"Explore the beauty of {topic}. #Nature #Travel"
+        print(f"Error AI: {e}")
+        return f"Amazing {topic} 🔥", f"Watch this cool video about {topic}. #Shorts"
 
 def upload_video(file_path, topic):
-    # 1. Generate Caption
     print(f"AI sedang menulis caption untuk: {topic}...")
     title_ai, desc_ai = generate_ai_caption(topic)
-    
-    print(f"Judul Final: {title_ai}")
+    print(f"Judul: {title_ai}")
 
-    # 2. Upload ke YouTube
     token_json = os.environ.get("YOUTUBE_TOKEN_JSON")
-    if not token_json:
-        raise Exception("Token YouTube tidak ditemukan")
-
-    creds_dict = json.loads(token_json)
-    creds = Credentials.from_authorized_user_info(creds_dict)
-
+    creds = Credentials.from_authorized_user_info(json.loads(token_json))
     youtube = build('youtube', 'v3', credentials=creds)
 
-    request_body = {
+    body = {
         'snippet': {
             'title': title_ai,
             'description': desc_ai,
-            'tags': ['Travel', 'Nature', 'Shorts', topic, 'Wanderlust'],
-            'categoryId': '22'
+            'tags': ['Shorts', topic, 'Viral'],
+            'categoryId': '22' # 17=Sports, 1=Film/Anime, tapi 22 (People & Blogs) aman untuk semua.
         },
-        'status': {
-            'privacyStatus': 'public',
-            'selfDeclaredMadeForKids': False
-        }
+        'status': {'privacyStatus': 'public', 'selfDeclaredMadeForKids': False}
     }
 
-    media = MediaFileUpload(file_path, chunksize=-1, resumable=True)
-
-    request = youtube.videos().insert(
-        part='snippet,status',
-        body=request_body,
-        media_body=media
-    )
-
-    response = request.execute()
-    print(f"🎉 SUKSES! Video uploaded ID: {response['id']}")
+    youtube.videos().insert(
+        part='snippet,status', body=body,
+        media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
+    ).execute()
+    print(f"🎉 SUKSES UPLOAD!")
