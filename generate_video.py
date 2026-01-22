@@ -5,25 +5,31 @@ from moviepy.editor import VideoFileClip, AudioFileClip
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-# Daftar Nama File Resmi di Wikimedia (Sudah diperbaiki dari typo)
-MUSIC_TITLES = [
-    "File:Erik_Satie_-_Gymnopedie_No_1.ogg",
-    "File:Frederic_Chopin_-_Nocturne_in_E_flat_major,_Op._9,_No._2.ogg", 
-    "File:Claude_Debussy_-_Clair_de_lune.ogg"
+# Kata Kunci Pencarian (Bukan nama file kaku)
+# Script akan mencari file audio OGG terbaik berdasarkan kata kunci ini.
+MUSIC_KEYWORDS = [
+    "Erik Satie Gymnopedie No 1 ogg",
+    "Chopin Nocturne Op 9 No 2 ogg",
+    "Debussy Clair de Lune ogg"
 ]
 
-def get_wikimedia_direct_url(title):
-    """Mendapatkan Link Download Asli via API Wikimedia dengan Penyamaran Browser"""
+def get_wikimedia_search_url(query):
+    """Mencari URL Audio via Fitur Pencarian (Lebih Aman dari Typo)"""
     api_url = "https://commons.wikimedia.org/w/api.php"
+    
+    # Parameter untuk mencari file (bukan menembak nama file)
     params = {
         "action": "query",
         "format": "json",
-        "prop": "imageinfo",
-        "iiprop": "url",
-        "titles": title
+        "generator": "search",
+        "gsrsearch": query,      # Kata kunci pencarian
+        "gsrnamespace": 6,       # Namespace 6 = File
+        "gsrlimit": 1,           # Ambil 1 hasil teratas saja
+        "prop": "imageinfo",     # Minta info file
+        "iiprop": "url"          # Minta URL downloadnya
     }
     
-    # Header Browser Chrome Asli (Agar tidak diblokir 403)
+    # Header Browser Chrome (Wajib agar tidak diblokir 403)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
     }
@@ -31,12 +37,15 @@ def get_wikimedia_direct_url(title):
     try:
         response = requests.get(api_url, params=params, headers=headers)
         data = response.json()
-        pages = data['query']['pages']
-        for page_id in pages:
-            if 'imageinfo' in pages[page_id]:
-                return pages[page_id]['imageinfo'][0]['url']
+        
+        # Parse hasil pencarian
+        if "query" in data and "pages" in data["query"]:
+            pages = data["query"]["pages"]
+            for page_id in pages:
+                if "imageinfo" in pages[page_id]:
+                    return pages[page_id]["imageinfo"][0]["url"]
     except Exception as e:
-        print(f"   Gagal mengambil API untuk {title}: {e}")
+        print(f"   Gagal mencari API untuk {query}: {e}")
     
     return None
 
@@ -57,9 +66,11 @@ def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
         print(f"Video tidak ditemukan untuk: {topic}")
         return None
 
+    # Pilih video random
     video_data = random.choice(data['videos'])
     video_files = video_data['video_files']
     
+    # Prioritaskan HD (width >= 720)
     valid_files = [v for v in video_files if v['width'] >= 720]
     if not valid_files:
         valid_files = video_files 
@@ -76,27 +87,27 @@ def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
     return video_filename
 
 def get_background_music():
-    print("2. Mencari & Download Musik Latar (via API)...")
+    print("2. Mencari & Download Musik Latar (Mode Smart Search)...")
     
-    # Gunakan Header Chrome yang sama untuk proses download file
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
     try:
-        # Loop percobaan: Jika lagu pertama gagal, coba lagu lain
-        # Kita acak urutannya, lalu coba satu per satu sampai berhasil
-        shuffled_titles = random.sample(MUSIC_TITLES, len(MUSIC_TITLES))
+        # Acak urutan pencarian
+        shuffled_keywords = random.sample(MUSIC_KEYWORDS, len(MUSIC_KEYWORDS))
         
-        for title in shuffled_titles:
-            print(f"   Mencoba lagu: {title}")
-            music_url = get_wikimedia_direct_url(title)
+        for keyword in shuffled_keywords:
+            print(f"   Mencari lagu dengan kata kunci: '{keyword}'")
+            music_url = get_wikimedia_search_url(keyword)
             
             if not music_url:
-                print("   Link tidak ditemukan, coba lagu berikutnya...")
-                continue # Coba judul berikutnya
+                print("   Tidak ada hasil di Wikimedia, coba keyword lain...")
+                continue
 
-            print(f"   URL didapat, mulai download...")
+            print(f"   URL didapat: {music_url}")
+            print(f"   Mulai download...")
+            
             r = requests.get(music_url, headers=headers, stream=True)
             
             if r.status_code == 200:
@@ -106,13 +117,14 @@ def get_background_music():
                         if chunk:
                             f.write(chunk)
                 
+                # Cek apakah file valid (ukurannya masuk akal > 10KB)
                 if os.path.getsize(audio_filename) > 10000:
                     print("   Download Sukses!")
-                    return audio_filename # Berhasil, keluar dari loop
+                    return audio_filename
             
             print(f"   Gagal download (Status {r.status_code}), mencoba lagu lain...")
             
-        return None # Jika semua lagu gagal
+        return None
 
     except Exception as e:
         print(f"   Error sistem download musik: {e}")
@@ -142,6 +154,7 @@ def process_video(input_video_path):
         try:
             audio_clip = AudioFileClip(audio_path)
             
+            # Loop audio jika kependekan
             if audio_clip.duration < duration:
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 loops = int(duration / audio_clip.duration) + 1
@@ -159,7 +172,6 @@ def process_video(input_video_path):
         print("   Audio tidak tersedia (semua download gagal). Video akan bisu.")
 
     print("3. Rendering Final Video...")
-    # Preset ultrafast & codec aac
     final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", preset="ultrafast")
     
     try:
