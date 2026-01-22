@@ -6,44 +6,61 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 def generate_ai_caption(topic):
-    # Setup Gemini
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return f"Amazing View: {topic} 🌍 #Shorts", f"Beautiful nature scenery in {topic}. #Travel"
         
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Prompt dinamis yang mengikuti topik negara
+    # Prompt tetap sama
     prompt = f"""
-    Kamu adalah Travel Influencer profesional.
-    Buatkan Judul dan Deskripsi YouTube Shorts untuk video pemandangan tentang: '{topic}'.
+    Kamu adalah Travel Influencer.
+    Buatkan Judul dan Deskripsi YouTube Shorts tentang: {topic}.
     
     Aturan:
-    1. Judul: Bikin penasaran (Clickbait), Max 60 karakter, Gunakan Emoji bendera negara tersebut.
-    2. Deskripsi: 2 kalimat singkat yang memuji keindahan tempat itu. Bahasa Indonesia mix Inggris gaul.
-    3. Hashtags: Berikan 3-5 hashtag relevan (nama negara, nama tempat, #Travel).
+    1. Judul: Clickbait, Max 60 char, Emoji Bendera Negara.
+    2. Deskripsi: 2 kalimat memuji keindahan.
+    3. Hashtags: 3-5 tags relevan.
     4. Output WAJIB JSON murni: {{"title": "...", "description": "..."}}
     """
     
-    try:
-        response = model.generate_content(prompt)
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_text)
-        return data['title'], data['description']
-    except Exception as e:
-        print(f"Error AI: {e}")
-        # Fallback caption jika AI error
-        return f"Wanderlust: {topic} ✈️ #Shorts", f"Explore the beauty of {topic}. #Nature #Travel"
+    # DAFTAR MODEL YANG AKAN DICOBA (Urutan Prioritas)
+    # Jika yang pertama gagal, dia akan coba yang kedua, dst.
+    models_to_try = [
+        'gemini-1.5-flash',          # Paling Cepat & Baru
+        'gemini-1.5-flash-latest',   # Versi Alternatif
+        'gemini-pro'                 # Versi Lama (Paling Stabil/Cadangan)
+    ]
+    
+    for model_name in models_to_try:
+        try:
+            print(f"   🤖 Mencoba AI Model: {model_name}...")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            
+            # Bersihkan hasil
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_text)
+            
+            print("   ✅ Sukses membuat caption!")
+            return data['title'], data['description']
+            
+        except Exception as e:
+            print(f"   ❌ Gagal dengan model {model_name}: {e}")
+            continue # Lanjut coba model berikutnya
+            
+    # Jika semua model gagal (kiamat internet), pakai caption manual
+    print("   ⚠️ Semua model AI gagal. Menggunakan caption manual.")
+    return f"Wanderlust: {topic} ✈️ #Shorts", f"Explore the beauty of {topic}. #Nature #Travel"
 
 def upload_video(file_path, topic):
-    # 1. Minta AI bikin caption sesuai topik negara
+    # 1. Generate Caption dengan sistem Anti-Error
     print(f"AI sedang menulis caption untuk: {topic}...")
     title_ai, desc_ai = generate_ai_caption(topic)
     
-    print(f"Judul: {title_ai}")
+    print(f"Judul Final: {title_ai}")
 
-    # 2. Upload
+    # 2. Upload ke YouTube
     token_json = os.environ.get("YOUTUBE_TOKEN_JSON")
     if not token_json:
         raise Exception("Token YouTube tidak ditemukan")
@@ -58,7 +75,7 @@ def upload_video(file_path, topic):
             'title': title_ai,
             'description': desc_ai,
             'tags': ['Travel', 'Nature', 'Shorts', topic, 'Wanderlust'],
-            'categoryId': '22' # People & Blogs
+            'categoryId': '22'
         },
         'status': {
             'privacyStatus': 'public',
@@ -75,4 +92,4 @@ def upload_video(file_path, topic):
     )
 
     response = request.execute()
-    print(f"Sukses! Video uploaded ID: {response['id']}")
+    print(f"🎉 SUKSES! Video uploaded ID: {response['id']}")
