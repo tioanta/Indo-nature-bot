@@ -1,21 +1,15 @@
 import os
 import requests
 import random
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+from moviepy.editor import VideoFileClip, AudioFileClip
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-# Daftar Musik Aman (Public Domain / Creative Commons)
-# Kita gunakan link stabil dari Wikimedia Commons & Sumber Free lainnya
+# Daftar Musik Aman (Wikimedia)
 MUSIC_URLS = [
-    # Erik Satie - Gymnopedie No 1 (Sangat cocok untuk nature/calm)
     "https://upload.wikimedia.org/wikipedia/commons/e/e6/Erik_Satie_-_Gymnopedie_No_1.ogg",
-    # Chopin - Nocturne (Piano lembut)
     "https://upload.wikimedia.org/wikipedia/commons/e/e3/Frederic_Chopin_-_Nocturne_in_E_flat_major%2C_Op._9%2C_No._2.ogg",
-    # Debussy - Clair de Lune
-    "https://upload.wikimedia.org/wikipedia/commons/3/36/Claude_Debussy_-_Clair_de_lune.ogg",
-    # Lagu Alam / Ambient (Contoh placeholder, jika gagal akan pakai yang atas)
-    "https://upload.wikimedia.org/wikipedia/commons/7/73/Kawai-calm.ogg"
+    "https://upload.wikimedia.org/wikipedia/commons/3/36/Claude_Debussy_-_Clair_de_lune.ogg"
 ]
 
 def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
@@ -57,15 +51,36 @@ def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
 
 def get_background_music():
     print("2. Mencari & Download Musik Latar...")
+    
+    # HEADER PENTING: Agar tidak diblokir Wikimedia
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
     try:
-        # Pilih 1 lagu secara acak
         music_url = random.choice(MUSIC_URLS)
+        print(f"   Mengunduh dari: {music_url}")
         
-        r = requests.get(music_url)
-        audio_filename = "bg_music.ogg" # Format OGG lebih ringan & didukung moviepy
-        with open(audio_filename, 'wb') as f:
-            f.write(r.content)
-        return audio_filename
+        r = requests.get(music_url, headers=headers, stream=True)
+        
+        # Cek apakah download sukses (Kode 200)
+        if r.status_code == 200:
+            audio_filename = "bg_music.ogg"
+            with open(audio_filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+            
+            # Cek ukuran file, kalau terlalu kecil (< 10KB) berarti error
+            if os.path.getsize(audio_filename) < 10000:
+                print("   File audio korup/terlalu kecil. Skip audio.")
+                return None
+                
+            return audio_filename
+        else:
+            print(f"   Gagal download. Status Code: {r.status_code}")
+            return None
+
     except Exception as e:
         print(f"   Gagal download musik: {e}")
         return None
@@ -74,43 +89,66 @@ def process_video(input_video_path):
     output_file = "final_short.mp4"
     
     # 1. Load Video
-    video_clip = VideoFileClip(input_video_path)
+    try:
+        video_clip = VideoFileClip(input_video_path)
+    except OSError:
+        print("Error: File video rusak atau tidak terbaca.")
+        return None
     
-    # 2. Potong durasi video (Max 15 detik untuk Shorts)
+    # 2. Potong durasi video (Max 15 detik)
     duration = min(video_clip.duration, 15) 
     video_clip = video_clip.subclip(0, duration)
     
     # 3. Crop ke 9:16 (Vertikal)
     if video_clip.w > video_clip.h:
-        video_clip = video_clip.crop(x1=video_clip.w/2 - video_clip.h*9/32, width=video_clip.h*9/16, height=video_clip.h)
+        # Crop tengah
+        new_width = video_clip.h * 9 / 16
+        x1 = (video_clip.w / 2) - (new_width / 2)
+        video_clip = video_clip.crop(x1=x1, width=new_width, height=video_clip.h)
     
     # 4. Tambahkan Audio
     audio_path = get_background_music()
+    final_clip = video_clip # Default tanpa suara
+    
     if audio_path:
         try:
             # Load Audio
             audio_clip = AudioFileClip(audio_path)
             
-            # Jika lagu lebih pendek dari video, di-loop (jarang terjadi sih)
+            # Loop audio jika lebih pendek dari video
             if audio_clip.duration < duration:
-                from moviepy.audio.fx.all import audio_loop
-                audio_clip = audio_loop(audio_clip, duration=duration)
+                # Manual loop sederhana untuk kompatibilitas moviepy lama
+                from moviepy.audio.AudioClip import CompositeAudioClip
+                audio_clip = CompositeAudioClip([audio_clip.set_start(i*audio_clip.duration) for i in range(int(duration/audio_clip.duration)+1)])
             
             # Potong audio sesuai durasi video
             audio_clip = audio_clip.subclip(0, duration)
             
-            # Set volume (biar tidak terlalu kencang/pecah) -> 80%
+            # Set volume 80%
             audio_clip = audio_clip.volumex(0.8)
             
             # Tempel ke video
-            video_clip = video_clip.set_audio(audio_clip)
+            final_clip = video_clip.set_audio(audio_clip)
             print("   Sukses menggabungkan Audio + Video.")
+            
         except Exception as e:
-            print(f"   Error saat merging audio: {e} (Video akan bisu)")
-    
+            print(f"   Error saat merging audio: {e}. Video akan bisu.")
+            final_clip = video_clip # Fallback ke video bisu
+    else:
+        print("   Audio tidak ditemukan/gagal download. Video akan bisu.")
+
     # 5. Render Final
     print("3. Rendering Final Video...")
-    # audio_codec='aac' wajib agar suara keluar di YouTube/HP
-    video_clip.write_videofile(output_file, codec="libx264", audio_codec="aac")
+    # Gunakan preset ultrafast agar hemat waktu runner
+    final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", preset="ultrafast")
     
+    # Bersihkan file sampah
+    try:
+        video_clip.close()
+        if audio_path: 
+            # Hapus file audio temp
+            os.remove(audio_path)
+    except:
+        pass
+        
     return output_file
