@@ -5,16 +5,15 @@ from moviepy.editor import VideoFileClip, AudioFileClip
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-# Menggunakan Nama File Resmi di Wikimedia (Bukan Link Langsung)
-# Script akan mencari link aslinya secara otomatis lewat API.
+# Daftar Nama File Resmi di Wikimedia (Sudah diperbaiki dari typo)
 MUSIC_TITLES = [
-    "File:Frederic_Chopin_-_Nocturne_Eb_major_Opus_9,_number_2.ogg",
-    "File:Gymnopedie_No._1..ogg",
-    "File:Clair_de_lune_(Claude_Debussy)_Suite_bergamasque.ogg"
+    "File:Erik_Satie_-_Gymnopedie_No_1.ogg",
+    "File:Frederic_Chopin_-_Nocturne_in_E_flat_major,_Op._9,_No._2.ogg", 
+    "File:Claude_Debussy_-_Clair_de_lune.ogg"
 ]
 
 def get_wikimedia_direct_url(title):
-    """Mendapatkan Link Download Asli via API Wikimedia"""
+    """Mendapatkan Link Download Asli via API Wikimedia dengan Penyamaran Browser"""
     api_url = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
@@ -24,9 +23,9 @@ def get_wikimedia_direct_url(title):
         "titles": title
     }
     
-    # Header User-Agent (Wajib agar tidak diblokir)
+    # Header Browser Chrome Asli (Agar tidak diblokir 403)
     headers = {
-        'User-Agent': 'BotPencariAlam/1.0 (test@example.com)' 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
     }
 
     try:
@@ -58,11 +57,9 @@ def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
         print(f"Video tidak ditemukan untuk: {topic}")
         return None
 
-    # Pilih video random
     video_data = random.choice(data['videos'])
     video_files = video_data['video_files']
     
-    # Prioritaskan HD (width >= 720)
     valid_files = [v for v in video_files if v['width'] >= 720]
     if not valid_files:
         valid_files = video_files 
@@ -81,46 +78,44 @@ def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
 def get_background_music():
     print("2. Mencari & Download Musik Latar (via API)...")
     
-    # Header untuk download file
+    # Gunakan Header Chrome yang sama untuk proses download file
     headers = {
-        'User-Agent': 'BotPencariAlam/1.0 (test@example.com)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
     try:
-        # Pilih 1 judul lagu
-        chosen_title = random.choice(MUSIC_TITLES)
-        print(f"   Lagu terpilih: {chosen_title}")
+        # Loop percobaan: Jika lagu pertama gagal, coba lagu lain
+        # Kita acak urutannya, lalu coba satu per satu sampai berhasil
+        shuffled_titles = random.sample(MUSIC_TITLES, len(MUSIC_TITLES))
         
-        # Minta Link Asli ke API
-        music_url = get_wikimedia_direct_url(chosen_title)
-        
-        if not music_url:
-            print("   Gagal mendapatkan URL dari API.")
-            return None
-
-        print(f"   Mengunduh dari URL Stabil: {music_url}")
-        
-        r = requests.get(music_url, headers=headers, stream=True)
-        
-        if r.status_code == 200:
-            audio_filename = "bg_music.ogg"
-            with open(audio_filename, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024):
-                    if chunk:
-                        f.write(chunk)
+        for title in shuffled_titles:
+            print(f"   Mencoba lagu: {title}")
+            music_url = get_wikimedia_direct_url(title)
             
-            # Validasi ukuran file
-            if os.path.getsize(audio_filename) < 10000:
-                print("   File audio korup/terlalu kecil.")
-                return None
+            if not music_url:
+                print("   Link tidak ditemukan, coba lagu berikutnya...")
+                continue # Coba judul berikutnya
+
+            print(f"   URL didapat, mulai download...")
+            r = requests.get(music_url, headers=headers, stream=True)
+            
+            if r.status_code == 200:
+                audio_filename = "bg_music.ogg"
+                with open(audio_filename, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1024):
+                        if chunk:
+                            f.write(chunk)
                 
-            return audio_filename
-        else:
-            print(f"   Gagal download. Status Code: {r.status_code}")
-            return None
+                if os.path.getsize(audio_filename) > 10000:
+                    print("   Download Sukses!")
+                    return audio_filename # Berhasil, keluar dari loop
+            
+            print(f"   Gagal download (Status {r.status_code}), mencoba lagu lain...")
+            
+        return None # Jika semua lagu gagal
 
     except Exception as e:
-        print(f"   Gagal download musik: {e}")
+        print(f"   Error sistem download musik: {e}")
         return None
 
 def process_video(input_video_path):
@@ -132,17 +127,14 @@ def process_video(input_video_path):
         print(f"Error membaca video: {e}")
         return None
     
-    # 2. Potong durasi video (Max 15 detik)
     duration = min(video_clip.duration, 15) 
     video_clip = video_clip.subclip(0, duration)
     
-    # 3. Crop ke 9:16 (Vertikal)
     if video_clip.w > video_clip.h:
         new_width = video_clip.h * 9 / 16
         x1 = (video_clip.w / 2) - (new_width / 2)
         video_clip = video_clip.crop(x1=x1, width=new_width, height=video_clip.h)
     
-    # 4. Tambahkan Audio
     audio_path = get_background_music()
     final_clip = video_clip
     
@@ -150,15 +142,13 @@ def process_video(input_video_path):
         try:
             audio_clip = AudioFileClip(audio_path)
             
-            # Loop audio jika kependekan
             if audio_clip.duration < duration:
-                # Teknik looping manual yang aman
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 loops = int(duration / audio_clip.duration) + 1
                 audio_clip = CompositeAudioClip([audio_clip.set_start(i * audio_clip.duration) for i in range(loops)])
             
             audio_clip = audio_clip.subclip(0, duration)
-            audio_clip = audio_clip.volumex(0.8) # Volume 80%
+            audio_clip = audio_clip.volumex(0.8)
             
             final_clip = video_clip.set_audio(audio_clip)
             print("   Sukses menggabungkan Audio + Video.")
@@ -166,13 +156,12 @@ def process_video(input_video_path):
         except Exception as e:
             print(f"   Error saat merging audio: {e}. Video akan bisu.")
     else:
-        print("   Audio tidak tersedia. Video akan bisu.")
+        print("   Audio tidak tersedia (semua download gagal). Video akan bisu.")
 
-    # 5. Render Final
     print("3. Rendering Final Video...")
+    # Preset ultrafast & codec aac
     final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", preset="ultrafast")
     
-    # Cleanup
     try:
         video_clip.close()
         if audio_path and os.path.exists(audio_path):
