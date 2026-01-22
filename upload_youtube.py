@@ -9,44 +9,44 @@ def generate_ai_caption(topic):
     # Setup Gemini
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        # Fallback jika lupa pasang API Key
-        return "Saudi Arabia Hidden Gem 🇸🇦 #Shorts", "Beautiful nature in Saudi Arabia. #Travel"
+        return f"Amazing View: {topic} 🌍 #Shorts", f"Beautiful nature scenery in {topic}. #Travel"
         
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
+    # Prompt dinamis yang mengikuti topik negara
     prompt = f"""
-    Kamu adalah Social Media Manager profesional.
-    Buatkan Judul (Title) dan Deskripsi untuk YouTube Shorts tentang pemandangan: '{topic}' di Arab Saudi.
+    Kamu adalah Travel Influencer profesional.
+    Buatkan Judul dan Deskripsi YouTube Shorts untuk video pemandangan tentang: '{topic}'.
     
-    Syarat:
-    1. Judul: Maksimal 60 karakter, Clickbait, Menarik, ada Emoji. Bahasa Indonesia campur Inggris.
-    2. Deskripsi: Singkat (2 kalimat), estetik, mengajak orang berkunjung. Sertakan 5 hashtags relevan.
-    3. Output WAJIB format JSON murni: {{"title": "...", "description": "..."}}
+    Aturan:
+    1. Judul: Bikin penasaran (Clickbait), Max 60 karakter, Gunakan Emoji bendera negara tersebut.
+    2. Deskripsi: 2 kalimat singkat yang memuji keindahan tempat itu. Bahasa Indonesia mix Inggris gaul.
+    3. Hashtags: Berikan 3-5 hashtag relevan (nama negara, nama tempat, #Travel).
+    4. Output WAJIB JSON murni: {{"title": "...", "description": "..."}}
     """
-
+    
     try:
         response = model.generate_content(prompt)
-        # Bersihkan format markdown ```json jika ada
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(clean_text)
         return data['title'], data['description']
     except Exception as e:
         print(f"Error AI: {e}")
-        return f"Amazing {topic} in Saudi Arabia 🇸🇦", "#SaudiArabia #Nature #Shorts"
+        # Fallback caption jika AI error
+        return f"Wanderlust: {topic} ✈️ #Shorts", f"Explore the beauty of {topic}. #Nature #Travel"
 
-def upload_video(file_path, topic="Saudi Arabia Nature"):
-    # 1. Generate Caption Dulu
-    print(f"Sedang meminta AI membuat caption untuk topik: {topic}...")
+def upload_video(file_path, topic):
+    # 1. Minta AI bikin caption sesuai topik negara
+    print(f"AI sedang menulis caption untuk: {topic}...")
     title_ai, desc_ai = generate_ai_caption(topic)
     
     print(f"Judul: {title_ai}")
-    print(f"Deskripsi: {desc_ai}")
 
-    # 2. Proses Upload
+    # 2. Upload
     token_json = os.environ.get("YOUTUBE_TOKEN_JSON")
     if not token_json:
-        raise Exception("Token YouTube tidak ditemukan di Secrets")
+        raise Exception("Token YouTube tidak ditemukan")
 
     creds_dict = json.loads(token_json)
     creds = Credentials.from_authorized_user_info(creds_dict)
@@ -57,8 +57,8 @@ def upload_video(file_path, topic="Saudi Arabia Nature"):
         'snippet': {
             'title': title_ai,
             'description': desc_ai,
-            'tags': ['Saudi Arabia', 'Travel', 'Shorts', topic],
-            'categoryId': '22'
+            'tags': ['Travel', 'Nature', 'Shorts', topic, 'Wanderlust'],
+            'categoryId': '22' # People & Blogs
         },
         'status': {
             'privacyStatus': 'public',
@@ -75,4 +75,4 @@ def upload_video(file_path, topic="Saudi Arabia Nature"):
     )
 
     response = request.execute()
-    print(f"Video uploaded! ID: {response['id']}")
+    print(f"Sukses! Video uploaded ID: {response['id']}")
