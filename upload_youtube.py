@@ -28,21 +28,34 @@ def generate_ai_caption(topic):
     Syarat Deskripsi: 2 kalimat seru + 3 hashtag relevan.
     """
     
-    # Auto-Detect Model (Flash -> Pro)
-    chosen_model = 'gemini-1.5-flash'
-    try:
-        genai.GenerativeModel(chosen_model).generate_content("test")
-    except:
-        chosen_model = 'gemini-pro'
-
-    try:
-        model = genai.GenerativeModel(chosen_model)
-        response = model.generate_content(prompt)
-        data = json.loads(response.text.replace("```json", "").replace("```", "").strip())
-        return data['title'], data['description']
-    except Exception as e:
-        print(f"Error AI: {e}")
-        return f"Amazing {topic} 🔥", f"Watch this cool video about {topic}. #Shorts"
+# DAFTAR MODEL YANG AKAN DICOBA (Urutan Prioritas)
+    # Jika yang pertama gagal, dia akan coba yang kedua, dst.
+    models_to_try = [
+        'gemini-1.5-flash',          # Paling Cepat & Baru
+        'gemini-1.5-flash-latest',   # Versi Alternatif
+        'gemini-pro'                 # Versi Lama (Paling Stabil/Cadangan)
+    ]
+    
+    for model_name in models_to_try:
+        try:
+            print(f"   🤖 Mencoba AI Model: {model_name}...")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            
+            # Bersihkan hasil
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_text)
+            
+            print("   ✅ Sukses membuat caption!")
+            return data['title'], data['description']
+            
+        except Exception as e:
+            print(f"   ❌ Gagal dengan model {model_name}: {e}")
+            continue # Lanjut coba model berikutnya
+            
+    # Jika semua model gagal (kiamat internet), pakai caption manual
+    print("   ⚠️ Semua model AI gagal. Menggunakan caption manual.")
+    return f"Wanderlust: {topic} ✈️ #Shorts", f"Explore the beauty of {topic}. #Nature #Travel"
 
 def upload_video(file_path, topic):
     print(f"AI sedang menulis caption untuk: {topic}...")
