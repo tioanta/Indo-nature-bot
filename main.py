@@ -13,9 +13,8 @@ def main():
         "Raja Ampat Ocean",
         
         # --- GENRE 2: ANIME VIBES & JAPAN (Cosplay/City) ---
-        "Cosplay Anime Japan",      # Akan cari video orang kostum
-        "Tokyo Akihabara Night",    # Vibes kota anime
-        "Japan Cyberpunk Neon",     # Vibes futuristik
+        "Tokyo Night",    # Vibes kota anime
+        "Japan technology",     # Vibes futuristik
         "Samurai Sword Fight",      # Vibes aksi
         
         # --- GENRE 3: FOOTBALL (SEPAKBOLA) ---
