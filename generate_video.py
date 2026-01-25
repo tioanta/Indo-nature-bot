@@ -66,8 +66,8 @@ def get_relaxing_music(topic):
                 continue
     return None
 
-def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
-    """Buat animated background visual untuk musik"""
+def make_animated_background(duration, topic, width=1920, height=1080, fps=12):
+    """Buat animated background visual untuk musik (optimized untuk speed)"""
     topic_lower = topic.lower()
     
     # Tentukan color palette berdasarkan genre
@@ -82,103 +82,94 @@ def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
         accent_colors = [np.array([60, 120, 140], dtype=np.uint8), np.array([80, 150, 170], dtype=np.uint8)]
     
     def make_frame(t):
-        """Generate frame dengan animasi"""
-        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        """Generate frame dengan animasi (simplified & optimized)"""
+        frame = np.ones((height, width, 3), dtype=np.uint8) * base_color
         
-        # Base gradient background
-        for y in range(height):
+        # Simplified gradient background (reduced loops)
+        for y in range(0, height, 5):  # Step 5 untuk faster processing
             ratio = y / height
             color = (base_color.astype(float) + 
                     (accent_colors[0].astype(float) - base_color.astype(float)) * ratio * 0.3)
-            frame[y, :] = np.clip(color, 0, 255).astype(np.uint8)
+            color_int = np.clip(color, 0, 255).astype(np.uint8)
+            frame[y:y+5, :] = color_int
         
-        # Animated orbs/circles yang bergerak
-        num_orbs = 4
+        # Simplified orbs - fewer dan lebih kecil
+        num_orbs = 2  # Reduce dari 4 ke 2
         for i in range(num_orbs):
-            # Hitung posisi orb berdasarkan waktu
             phase = (t * 0.3 + i * np.pi / num_orbs)
-            x = int(width / 2 + 300 * np.cos(phase))
-            y = int(height / 2 + 200 * np.sin(phase * 0.7))
+            x = int(width / 2 + 250 * np.cos(phase))
+            y = int(height / 2 + 150 * np.sin(phase * 0.7))
             
-            # Clamp position ke dalam bounds
+            # Clamp position
             x = max(0, min(x, width - 1))
             y = max(0, min(y, height - 1))
             
-            # Radius dan opacity berubah-ubah
-            radius = int(80 + 40 * np.sin(t * 0.5 + i))
-            radius = max(1, min(radius, 300))  # Clamp radius
-            alpha = int(100 + 100 * np.sin(t * 0.4 + i * 2))
-            alpha = max(1, min(alpha, 200))
+            # Simpler radius dan opacity
+            radius = int(60 + 30 * np.sin(t * 0.5 + i))
+            radius = max(5, min(radius, 150))
             
-            # Draw circle dengan gradient - safer approach
             color = accent_colors[i % len(accent_colors)]
             
-            # Create mesh grid untuk circle
-            yy, xx = np.ogrid[-radius:radius+1, -radius:radius+1]
-            dist = np.sqrt(xx**2 + yy**2)
-            
-            # Hanya draw bagian yang dalam bounds
-            for dy in range(-radius, radius+1):
-                ny = y + dy
-                if 0 <= ny < height:
-                    for dx in range(-radius, radius+1):
-                        nx = x + dx
-                        if 0 <= nx < width:
-                            dist_val = np.sqrt(dx**2 + dy**2)
-                            if dist_val < radius:
-                                fade = max(0, 1 - dist_val / radius)
-                                intensity = int(alpha * fade * 0.01)
-                                intensity = max(0, min(intensity, 255))
-                                frame[ny, nx] = (
-                                    frame[ny, nx].astype(float) * (255 - intensity) / 255 +
-                                    color.astype(float) * intensity / 255
-                                ).astype(np.uint8)
-        
-        # Animated lines/waves effect
-        wave_speed = t * 2
-        for x in range(0, width, 100):
-            y_offset = int(100 * np.sin((x / width) * np.pi * 2 + wave_speed))
-            y = int(height / 2 + y_offset)
-            
-            if 0 <= y < height:
-                cv = accent_colors[0]
-                for dy in range(-2, 3):
+            # Draw circle lebih efisien dengan step
+            for dx in range(-radius, radius+1, 2):  # Step 2 untuk faster
+                for dy in range(-radius, radius+1, 2):
+                    nx = x + dx
                     ny = y + dy
-                    if 0 <= ny < height:
-                        frame[ny, x] = (
-                            frame[ny, x].astype(float) * 0.6 +
-                            cv.astype(float) * 0.4
-                        ).astype(np.uint8)
+                    if 0 <= nx < width and 0 <= ny < height:
+                        dist_val = np.sqrt(dx**2 + dy**2)
+                        if dist_val < radius:
+                            fade = max(0, 1 - dist_val / radius)
+                            frame[ny, nx] = (
+                                frame[ny, nx].astype(float) * (1 - fade * 0.5) +
+                                color.astype(float) * fade * 0.5
+                            ).astype(np.uint8)
+        
+        # Simplified wave effect - reduce frequency
+        if int(t) % 2 == 0:  # Only update every 2 seconds
+            wave_speed = t * 1.5
+            for x in range(0, width, 150):  # Wider spacing
+                y_offset = int(80 * np.sin((x / width) * np.pi * 2 + wave_speed))
+                y = int(height / 2 + y_offset)
+                
+                if 0 <= y < height:
+                    cv = accent_colors[0]
+                    for dy in range(-1, 2):  # Thinner line
+                        ny = y + dy
+                        if 0 <= ny < height:
+                            frame[ny, x] = (
+                                frame[ny, x].astype(float) * 0.7 +
+                                cv.astype(float) * 0.3
+                            ).astype(np.uint8)
         
         return frame
     
     return VideoClip(make_frame, duration=duration)
 
-def create_music_video(music_path, topic, duration=1200):
-    """Membuat video musik 20 menit (1200 detik) dengan background visual minimal"""
+def create_music_video(music_path, topic, duration=600):
+    """Membuat video musik 10 menit (600 detik) dengan background visual minimal"""
     output_file = "final_music_video.mp4"
     
     try:
         # Load musik
         audio_clip = AudioFileClip(music_path)
-        actual_duration = duration  # Always 1200 detik (20 menit)
+        actual_duration = duration  # Always 600 detik (10 menit)
         
         print(f"   Target durasi video: {actual_duration//60:.1f} menit")
         print(f"   Durasi musik asli: {audio_clip.duration//60:.1f} menit")
         
-        # Jika musik lebih pendek dari 20 menit, loop-kan
+        # Jika musik lebih pendek dari 10 menit, loop-kan
         if audio_clip.duration < actual_duration:
             print(f"   Musik lebih pendek, melakukan looping...")
             loops = int(actual_duration / audio_clip.duration) + 1
             audio_list = [audio_clip] * loops
             audio_clip = concatenate_audioclips(audio_list).subclip(0, actual_duration)
         else:
-            print(f"   Musik cukup panjang, memotong ke 20 menit...")
+            print(f"   Musik cukup panjang, memotong ke 10 menit...")
             audio_clip = audio_clip.subclip(0, actual_duration)
         
         # Buat animated background
-        print("   Membuat animated background...")
-        animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=24)
+        print("   Membuat animated background (optimized)...")
+        animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=12)
         
         # Tambahkan text judul di tengah dengan semi-transparent background
         try:
@@ -191,9 +182,9 @@ def create_music_video(music_path, topic, duration=1200):
         # Set audio
         final_clip = final_clip.set_audio(audio_clip.volumex(0.9))
         
-        print("   Rendering musik video (20 menit)...")
+        print("   Rendering musik video (10 menit, ini akan memakan waktu beberapa menit)...")
         final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", 
-                                   preset="ultrafast", fps=24, verbose=False, logger=None)
+                                   preset="ultrafast", fps=12, verbose=False, logger=None)
         
         # Cleanup
         try:

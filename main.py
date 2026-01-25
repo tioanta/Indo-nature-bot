@@ -29,11 +29,11 @@ def main():
     today_topic = random.choice(topics)
     print(f"=== TEMA HARI INI: {today_topic} ===")
 
-    print("1. Mengumpulkan Musik (20 menit)...")
+    print("1. Mengumpulkan Musik (10 menit)...")
     music_path = generate_video.get_relaxing_music(topic=today_topic)
     
     if music_path:
-        print("2. Membuat Video dengan Background Visual (20 menit)...")
+        print("2. Membuat Video dengan Background Visual (10 menit)...")
         # PENTING: Kita kirim 'today_topic' agar visualnya nyambung!
         final_video = generate_video.create_music_video(music_path, topic=today_topic)
         

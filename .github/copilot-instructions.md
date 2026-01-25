@@ -1,10 +1,10 @@
 # Indo-Nature Bot: AI Coding Instructions
 
 ## Project Overview
-This is a **YouTube Music & Relaxation Automation Bot** that generates, creates, and uploads long-form music videos (20 minutes each) focused on relaxing and focusing content across three music genres (Lofi/Study, Meditation/Relaxation, and Nature Sounds) using free/affordable APIs (Wikimedia Commons for audio, Google Generative AI for captions).
+This is a **YouTube Music & Relaxation Automation Bot** that generates, creates, and uploads long-form music videos (10 minutes each) focused on relaxing and focusing content across three music genres (Lofi/Study, Meditation/Relaxation, and Nature Sounds) using free/affordable APIs (Wikimedia Commons for audio, Google Generative AI for captions).
 
 **Architecture**: Three sequential modules orchestrated by `main.py`:
-1. **`generate_video.py`**: Fetch relaxing music from Wikimedia Commons API → Create minimal background visual with topic text → Format as 1920x1080 landscape video
+1. **`generate_video.py`**: Fetch relaxing music from Wikimedia Commons API → Create animated background visual with topic text → Format as 1920x1080 landscape video
 2. **`upload_youtube.py`**: Generate AI-written captions (YouTube title + description optimized for music) → Upload via Google YouTube API with appropriate music/wellness categories
 3. **`main.py`**: Orchestrates workflow with random music topic selection and error handling
 
@@ -24,12 +24,12 @@ Two primary APIs with different characteristics:
 - **Google Generative AI** (`generate_ai_caption`): **Auto-detects available model** (priority: flash > pro > first available); gracefully falls back to `get_manual_caption()` template if API key missing or quota exhausted
 
 ### 3. Video Format Transformation
-**Critical change from previous shorts architecture:**
-- **Previous**: Portrait 9:16 format, 15 seconds max, video-primary content
-- **Current**: Landscape 1920x1080 (16:9), 20 minutes (1200 seconds), audio-primary content
-- **Visual approach**: Minimal static background with topic text overlay instead of dynamic video cropping
-- **Audio focus**: Music IS the primary content; background visuals are secondary (dark colors + centered text)
-- **Duration handling**: If music is shorter than 20 minutes, `concatenate_audioclips()` loops the audio to fill the full duration
+**Current Format:**
+- **Format**: Landscape 1920x1080 (16:9), 10 minutes (600 seconds), audio-primary content
+- **Visual approach**: Animated background with moving orbs and waves + topic text overlay
+- **Audio focus**: Music IS the primary content; animated visuals are secondary
+- **Duration handling**: If music is shorter than 10 minutes, `concatenate_audioclips()` loops the audio to fill the full duration
+- **FPS Optimization**: Renders at 12 FPS (optimized for speed) instead of 24 FPS
 
 ### 4. Error Handling Philosophy
 - **Silent failures with fallbacks**: `try/except` blocks pass silently or return `None` rather than crash
@@ -46,17 +46,18 @@ Token must be valid JSON string; loaded via `json.loads()` in `upload_youtube.py
 
 ## Common Modifications
 - **Add new music genre**: Update topics list in `main.py` (must include genre keywords like "lofi", "meditation", or "nature") and add matching keyword detection in `get_relaxing_music()` to route music selection correctly
-- **Adjust video length**: Change `duration=1200` in `create_music_video()` (currently 20 minutes = 1200 seconds); affects rendering time significantly
-- **Change background colors**: Modify RGB tuples in `create_music_video()` function (currently: study=dark blue, meditation=dark teal, nature=deep blue)
+- **Adjust video length**: Change `duration=600` in `create_music_video()` (currently 10 minutes = 600 seconds); affects rendering time significantly
+- **Change background colors**: Modify RGB tuples in `make_animated_background()` function (currently: study=dark blue, meditation=dark teal, nature=deep blue)
 - **Customize AI captions**: Edit the prompt in `generate_ai_caption()` to change tone/keywords (currently optimized for relaxing music industry standards)
 - **Change audio source**: Replace Wikimedia with another free audio API by modifying `get_relaxing_music()` function
+- **Adjust rendering speed**: Change FPS value (default 12) in both `make_animated_background()` and `write_videofile()` call
 
 ## Testing Workflow
 No automated tests present. Manual validation required:
 1. Set env vars locally: `GEMINI_API_KEY` and `YOUTUBE_TOKEN_JSON` (PEXELS_API_KEY no longer needed)
 2. Run `python main.py` and verify all three stages (music fetch, video creation, upload)
-3. Check YouTube channel for uploaded music videos and verify:
-   - Duration is approximately 20 minutes
+3. Check YouTube channel for up10 minutes
+   - Background has animated orbs and wavesimately 20 minutes
    - Background is dark with topic text visible
    - Category is either "Music" or "Wellness"
    - Tags and descriptions are music-focused (not sports/entertainment)
