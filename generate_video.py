@@ -1,7 +1,10 @@
 import os
 import requests
 import random
-from moviepy.editor import VideoFileClip, AudioFileClip, ColorClip, TextClip, CompositeVideoClip, concatenate_audioclips
+import numpy as np
+from moviepy.editor import VideoFileClip, AudioFileClip, ColorClip, TextClip, CompositeVideoClip, concatenate_audioclips, ImageClip
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+from moviepy.video.VideoClip import VideoClip
 from PIL import Image, ImageDraw
 import io
 
@@ -85,25 +88,17 @@ def create_music_video(music_path, topic, duration=1200):
             print(f"   Musik cukup panjang, memotong ke 20 menit...")
             audio_clip = audio_clip.subclip(0, actual_duration)
         
-        # Buat warna background menggunakan topic
-        topic_lower = topic.lower()
-        if "lofi" in topic_lower or "study" in topic_lower:
-            bg_color = (26, 26, 46)  # Dark blue
-        elif "meditation" in topic_lower or "sleep" in topic_lower:
-            bg_color = (20, 40, 50)  # Dark teal
-        else:
-            bg_color = (15, 35, 60)  # Deep blue
+        # Buat animated background
+        print("   Membuat animated background...")
+        animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=24)
         
-        # Buat background video (warna solid dengan subtitle)
-        background = ColorClip(size=(1920, 1080), color=bg_color).set_duration(actual_duration)
-        
-        # Tambahkan text judul di tengah
+        # Tambahkan text judul di tengah dengan semi-transparent background
         try:
-            title_text = TextClip(topic, fontsize=80, color='white', font='Arial')
+            title_text = TextClip(topic, fontsize=80, color='white', font='Arial-Bold')
             title_text = title_text.set_position('center').set_duration(actual_duration)
-            final_clip = CompositeVideoClip([background, title_text])
+            final_clip = CompositeVideoClip([animated_bg, title_text])
         except:
-            final_clip = background
+            final_clip = animated_bg
         
         # Set audio
         final_clip = final_clip.set_audio(audio_clip.volumex(0.9))
