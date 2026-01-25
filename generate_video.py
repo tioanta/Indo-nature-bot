@@ -67,7 +67,7 @@ def get_relaxing_music(topic):
     return None
 
 def get_nature_video(topic):
-    """Fetch video alam/laut dari Pexels berdasarkan topic"""
+    """Fetch video alam/laut dari Pexels berdasarkan topic - dengan variasi berbeda setiap run"""
     print(f"   Mencari video background untuk: {topic}...")
     
     if not PEXELS_API_KEY:
@@ -76,35 +76,57 @@ def get_nature_video(topic):
     
     headers = {"Authorization": PEXELS_API_KEY}
     
-    # Map topic ke search query video
+    # Map topic ke search query video - LEBIH BANYAK VARIASI
     topic_lower = topic.lower()
     
     if "lofi" in topic_lower or "study" in topic_lower or "focus" in topic_lower or "work" in topic_lower:
-        search_queries = ["Rain window", "Forest ambient", "Peaceful nature", "Rainy day"]
-        print("   -> Mode: LOFI / STUDY (Rain, Forest)")
+        search_queries = [
+            "Rain window", "Rainy day", "Rain drops", "Raining outside",
+            "Forest ambient", "Forest nature", "Peaceful forest", "Green forest",
+            "Peaceful nature", "Calm nature", "Serene landscape",
+            "Desk rain", "Working ambient", "Study room"
+        ]
+        print("   -> Mode: LOFI / STUDY")
     elif "meditation" in topic_lower or "sleep" in topic_lower or "zen" in topic_lower or "stress" in topic_lower:
-        search_queries = ["Ocean waves", "Water flowing", "Meditation nature", "Sea waves", "Beach waves"]
-        print("   -> Mode: MEDITATION (Water, Ocean)")
+        search_queries = [
+            "Ocean waves", "Beach waves", "Sea waves", "Wave crashing",
+            "Water flowing", "River water", "Stream flowing", "Waterfall",
+            "Meditation nature", "Calm water", "Peaceful water",
+            "Sunrise ocean", "Sea beach", "Tropical water"
+        ]
+        print("   -> Mode: MEDITATION / SLEEP")
     else:
-        search_queries = ["Rain forest", "Ocean nature", "Forest stream", "Waterfall", "Nature landscape"]
-        print("   -> Mode: NATURE (Forest, Water)")
+        search_queries = [
+            "Rain forest", "Tropical forest", "Dense forest",
+            "Ocean nature", "Beach nature", "Sea nature",
+            "Forest stream", "River forest", "Forest waterfall",
+            "Nature landscape", "Mountain nature", "Valley landscape",
+            "Sunset nature", "Forest path", "Green nature"
+        ]
+        print("   -> Mode: NATURE SOUNDS")
+    
+    # SHUFFLE queries agar setiap run berbeda urutan
+    random.shuffle(search_queries)
+    print(f"   Mencoba {len(search_queries)} search query (shuffled)")
     
     # Try setiap search query
-    for query in search_queries:
+    for idx, query in enumerate(search_queries, 1):
         try:
-            print(f"   Mencari video: '{query}'...")
-            url = f"https://api.pexels.com/videos/search?query={query}&per_page=5"
+            print(f"   [{idx}/{len(search_queries)}] Searching: '{query}'...")
+            # Increase per_page untuk lebih banyak pilihan
+            url = f"https://api.pexels.com/videos/search?query={query}&per_page=10&page={random.randint(1, 3)}"
             r = requests.get(url, headers=headers, timeout=10)
             data = r.json()
             
-            if data.get('videos'):
+            if data.get('videos') and len(data['videos']) > 0:
                 videos = data['videos']
-                print(f"      Ditemukan {len(videos)} video, memilih satu...")
+                print(f"      ✓ Ditemukan {len(videos)} video")
+                # RANDOM selection dari hasil search
                 video_obj = random.choice(videos)
                 video_files = video_obj.get('video_files', [])
                 
                 if not video_files:
-                    print(f"      Video tidak punya file, coba query lain...")
+                    print(f"      ⚠️ Video tidak punya file, lanjut...")
                     continue
                 
                 # Prefer HD videos (720p atau lebih)
@@ -119,18 +141,20 @@ def get_nature_video(topic):
                 if r.status_code == 200:
                     with open("background_video.mp4", 'wb') as f:
                         f.write(r.content)
-                    print(f"      ✓ Video background berhasil didownload! ({len(r.content) / (1024*1024):.1f} MB)")
+                    size_mb = len(r.content) / (1024*1024)
+                    print(f"      ✓✓✓ SUCCESS! Video downloaded ({size_mb:.1f} MB)")
+                    print(f"      Query yang berhasil: '{query}'")
                     return "background_video.mp4"
                 else:
-                    print(f"      Download gagal (status {r.status_code}), coba query lain...")
+                    print(f"      ❌ Download gagal (status {r.status_code})")
                     continue
             else:
-                print(f"      Tidak ada video, coba query lain...")
+                print(f"      ⚠️ Tidak ada video ditemukan")
         except Exception as e:
-            print(f"   ⚠️ Error: {e}, mencoba query lain...")
+            print(f"      ❌ Error: {str(e)[:60]}")
             continue
     
-    print("   ❌ Tidak bisa fetch video alam dari Pexels, akan gunakan animated background")
+    print("   ❌ Semua query gagal, akan gunakan animated background")
     return None
 
 def make_animated_background(duration, topic, width=1920, height=1080, fps=12):
