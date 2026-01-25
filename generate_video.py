@@ -66,6 +66,71 @@ def get_relaxing_music(topic):
                 continue
     return None
 
+def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
+    """Buat animated background visual untuk musik"""
+    topic_lower = topic.lower()
+    
+    # Tentukan color palette berdasarkan genre
+    if "lofi" in topic_lower or "study" in topic_lower:
+        base_color = np.array([26, 26, 46])  # Dark blue
+        accent_colors = [np.array([70, 130, 180]), np.array([100, 149, 237])]  # Steel blue, Cornflower
+    elif "meditation" in topic_lower or "sleep" in topic_lower:
+        base_color = np.array([20, 40, 50])  # Dark teal
+        accent_colors = [np.array([70, 130, 150]), np.array([100, 150, 180])]  # Teal shades
+    else:  # Nature sounds
+        base_color = np.array([15, 35, 60])  # Deep blue
+        accent_colors = [np.array([60, 120, 140]), np.array([80, 150, 170])]  # Ocean colors
+    
+    def make_frame(t):
+        """Generate frame dengan animasi"""
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Base gradient background
+        for y in range(height):
+            ratio = y / height
+            color = base_color.astype(float) + (accent_colors[0].astype(float) - base_color.astype(float)) * ratio * 0.3
+            frame[y, :] = color.astype(np.uint8)
+        
+        # Animated orbs/circles yang bergerak
+        num_orbs = 4
+        for i in range(num_orbs):
+            # Hitung posisi orb berdasarkan waktu
+            phase = (t * 0.3 + i * np.pi / num_orbs)
+            x = int(width / 2 + 300 * np.cos(phase))
+            y = int(height / 2 + 200 * np.sin(phase * 0.7))
+            
+            # Radius dan opacity berubah-ubah
+            radius = int(80 + 40 * np.sin(t * 0.5 + i))
+            alpha = int(100 + 100 * np.sin(t * 0.4 + i * 2))
+            
+            # Draw circle dengan gradient
+            color = accent_colors[i % len(accent_colors)]
+            for dy in range(-radius, radius):
+                for dx in range(-radius, radius):
+                    ny, nx = y + dy, x + dx
+                    dist = np.sqrt(dx**2 + dy**2)
+                    if dist < radius and 0 <= ny < height and 0 <= nx < width:
+                        # Fade effect from center
+                        fade = max(0, 1 - dist / radius)
+                        intensity = int(alpha * fade * 0.01)
+                        frame[ny, nx] = (frame[ny, nx].astype(float) * (255 - intensity) + 
+                                       color.astype(float) * intensity) / 255
+        
+        # Animated lines/waves effect
+        wave_speed = t * 2
+        for x in range(0, width, 100):
+            y = int(height / 2 + 100 * np.sin((x / width) * np.pi * 2 + wave_speed))
+            if 0 <= y < height:
+                cv = accent_colors[0]
+                for dy in range(-2, 3):
+                    if 0 <= y + dy < height:
+                        frame[y + dy, x] = (frame[y + dy, x].astype(float) * 0.6 + 
+                                          cv.astype(float) * 0.4).astype(np.uint8)
+        
+        return frame
+    
+    return VideoClip(make_frame, duration=duration)
+
 def create_music_video(music_path, topic, duration=1200):
     """Membuat video musik 20 menit (1200 detik) dengan background visual minimal"""
     output_file = "final_music_video.mp4"
