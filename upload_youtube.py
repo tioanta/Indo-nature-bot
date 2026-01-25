@@ -101,15 +101,19 @@ def upload_video(file_path, topic):
         creds = Credentials.from_authorized_user_info(json.loads(token_json))
         youtube = build('youtube', 'v3', credentials=creds)
 
-        # Tentukan category ID berdasarkan topic (Music = 10, Wellness = 39)
+        # Tentukan category ID berdasarkan topic
+        # YouTube valid categories: 10=Music, 17=Sports, 18=Short Movies, 20=Shorts, 21=Trailers, 
+        # 22=Videos, 23=Watches, 24=World, 25=Animation, 26=Autos, 27=Blooper, 28=Children, 
+        # 29=Comedy, 30=Documentaries, 31=Education, 32=Entertainment, 33=Events, 34=Film, 
+        # 35=Gaming, 36=Holiday, 37=How-To, 38=Human, 39=INVALID, 40=Import, 41=Interaction, 42=Internship
         topic_lower = topic.lower()
-        if any(word in topic_lower for word in ['lofi', 'study', 'focus', 'work', 'meditation', 'sleep', 'relax', 'zen']):
-            category_id = '10'  # Music category
+        if any(word in topic_lower for word in ['lofi', 'study', 'focus', 'work', 'meditation', 'sleep', 'relax', 'zen', 'nature', 'ambient']):
+            category_id = '10'  # Music category (valid)
         else:
-            category_id = '39'  # Wellness & relaxation
+            category_id = '10'  # Default to Music (safest option)
         
         # Tentukan tags berdasarkan topic
-        default_tags = ['Music', 'Relaxing', '20 minutes']
+        default_tags = ['Music', 'Relaxing', '10 minutes']
         if 'lofi' in topic_lower or 'study' in topic_lower:
             tags = default_tags + ['LofiBeats', 'StudyMusic', 'FocusMusic']
         elif 'meditation' in topic_lower or 'sleep' in topic_lower:

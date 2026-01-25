@@ -8,6 +8,13 @@ from moviepy.video.VideoClip import VideoClip
 from PIL import Image, ImageDraw
 import io
 
+# Fix untuk PIL.Image.ANTIALIAS deprecated di Pillow 10+
+try:
+    from PIL.Image import Resampling
+    Image.ANTIALIAS = Resampling.LANCZOS
+except (AttributeError, ImportError):
+    Image.ANTIALIAS = Image.LANCZOS
+
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
 def get_wikimedia_search_url(query):
