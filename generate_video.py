@@ -2,7 +2,7 @@ import os
 import requests
 import random
 import numpy as np
-from moviepy.editor import VideoFileClip, AudioFileClip, ColorClip, TextClip, CompositeVideoClip, concatenate_audioclips, ImageClip
+from moviepy.editor import VideoFileClip, AudioFileClip, ColorClip, TextClip, CompositeVideoClip, concatenate_audioclips, ImageClip, concatenate_videoclips
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 from moviepy.video.VideoClip import VideoClip
 from PIL import Image, ImageDraw
@@ -64,6 +64,56 @@ def get_relaxing_music(topic):
                     if os.path.getsize("bg_music.ogg") > 100000: return "bg_music.ogg"
             except:
                 continue
+    return None
+
+def get_nature_video(topic):
+    """Fetch video alam/laut dari Pexels berdasarkan topic"""
+    print(f"   Mencari video background untuk: {topic}...")
+    
+    headers = {"Authorization": PEXELS_API_KEY}
+    
+    # Map topic ke search query video
+    topic_lower = topic.lower()
+    
+    if "lofi" in topic_lower or "study" in topic_lower or "focus" in topic_lower or "work" in topic_lower:
+        search_queries = ["Rain window", "Forest ambient", "Peaceful nature"]
+        print("   -> Mode: LOFI / STUDY (Rain, Forest)")
+    elif "meditation" in topic_lower or "sleep" in topic_lower or "zen" in topic_lower or "stress" in topic_lower:
+        search_queries = ["Ocean waves", "Water flowing", "Meditation nature"]
+        print("   -> Mode: MEDITATION (Water, Ocean)")
+    else:
+        search_queries = ["Rain forest", "Ocean nature", "Forest stream"]
+        print("   -> Mode: NATURE (Forest, Water)")
+    
+    # Try setiap search query
+    for query in search_queries:
+        try:
+            print(f"   Mencari video: '{query}'")
+            url = f"https://api.pexels.com/videos/search?query={query}&per_page=5"
+            r = requests.get(url, headers=headers, timeout=10)
+            data = r.json()
+            
+            if data.get('videos'):
+                video_obj = random.choice(data['videos'])
+                video_files = video_obj.get('video_files', [])
+                
+                # Prefer HD videos (720p atau lebih)
+                hd_files = [v for v in video_files if v.get('width', 0) >= 720]
+                video_file = hd_files[0] if hd_files else video_files[0]
+                
+                download_url = video_file['link']
+                
+                print(f"   Downloading video ({video_file.get('width', '?')}x{video_file.get('height', '?')})...")
+                r = requests.get(download_url, timeout=30)
+                if r.status_code == 200:
+                    with open("background_video.mp4", 'wb') as f:
+                        f.write(r.content)
+                    return "background_video.mp4"
+        except Exception as e:
+            print(f"   Gagal: {e}, mencoba query lain...")
+            continue
+    
+    print("   ⚠️ Tidak bisa fetch video alam, menggunakan animated background")
     return None
 
 def make_animated_background(duration, topic, width=1920, height=1080, fps=12):
@@ -146,7 +196,7 @@ def make_animated_background(duration, topic, width=1920, height=1080, fps=12):
     return VideoClip(make_frame, duration=duration)
 
 def create_music_video(music_path, topic, duration=600):
-    """Membuat video musik 10 menit (600 detik) dengan background visual minimal"""
+    """Membuat video musik 10 menit (600 detik) dengan real nature video atau animated background"""
     output_file = "final_music_video.mp4"
     
     try:
@@ -167,17 +217,58 @@ def create_music_video(music_path, topic, duration=600):
             print(f"   Musik cukup panjang, memotong ke 10 menit...")
             audio_clip = audio_clip.subclip(0, actual_duration)
         
-        # Buat animated background
-        print("   Membuat animated background (optimized)...")
-        animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=12)
+        # Try get nature video, fallback to animated background
+        print("   Mencoba fetch video alam...")
+        bg_video_path = get_nature_video(topic)
         
-        # Tambahkan text judul di tengah dengan semi-transparent background
-        try:
-            title_text = TextClip(topic, fontsize=80, color='white', font='Arial-Bold')
-            title_text = title_text.set_position('center').set_duration(actual_duration)
-            final_clip = CompositeVideoClip([animated_bg, title_text])
-        except:
-            final_clip = animated_bg
+        if bg_video_path:
+            print("   Menggunakan real nature video sebagai background...")
+            try:
+                background = VideoFileClip(bg_video_path)
+                
+                # Loop video jika lebih pendek dari durasi yang diinginkan
+                if background.duration < actual_duration:
+                    print(f"   Video background lebih pendek ({background.duration//60:.1f} menit), melakukan looping...")
+                    num_loops = int(actual_duration / background.duration) + 1
+                    video_list = [background] * num_loops
+                    background = concatenate_videoclips(video_list).subclip(0, actual_duration)
+                else:
+                    background = background.subclip(0, actual_duration)
+                
+                # Resize ke 1920x1080 jika perlu
+                if background.size != (1920, 1080):
+                    print(f"   Resize video dari {background.size} ke 1920x1080...")
+                    background = background.resize(height=1080)
+                
+                # Tambahkan text overlay
+                try:
+                    title_text = TextClip(topic, fontsize=80, color='white', font='Arial-Bold')
+                    title_text = title_text.set_position('center').set_duration(actual_duration)
+                    final_clip = CompositeVideoClip([background, title_text])
+                except:
+                    final_clip = background
+                
+            except Exception as e:
+                print(f"   ⚠️ Error loading video background: {e}")
+                print("   Fallback ke animated background...")
+                animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=12)
+                try:
+                    title_text = TextClip(topic, fontsize=80, color='white', font='Arial-Bold')
+                    title_text = title_text.set_position('center').set_duration(actual_duration)
+                    final_clip = CompositeVideoClip([animated_bg, title_text])
+                except:
+                    final_clip = animated_bg
+        else:
+            print("   Menggunakan animated background...")
+            animated_bg = make_animated_background(actual_duration, topic, width=1920, height=1080, fps=12)
+            
+            # Tambahkan text overlay
+            try:
+                title_text = TextClip(topic, fontsize=80, color='white', font='Arial-Bold')
+                title_text = title_text.set_position('center').set_duration(actual_duration)
+                final_clip = CompositeVideoClip([animated_bg, title_text])
+            except:
+                final_clip = animated_bg
         
         # Set audio
         final_clip = final_clip.set_audio(audio_clip.volumex(0.9))

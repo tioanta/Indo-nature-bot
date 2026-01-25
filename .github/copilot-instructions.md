@@ -14,22 +14,30 @@ This is a **YouTube Music & Relaxation Automation Bot** that generates, creates,
 The **topic string** flows through the entire pipeline and determines music styling:
 - **Content type detection**: `get_relaxing_music(topic)` uses `topic.lower()` to detect "lofi"/"study"/"focus", "meditation"/"sleep"/"zen", or default to nature sounds
 - **Music keywords**: Each genre gets specific search keywords (lofi hip hop for study, meditation ambient for relaxation, nature sounds/rain for nature)
+- **Video background mapping**: `get_nature_video(topic)` maps genre to relevant video searches:
+  - "lofi/study/focus" → Rain window, Forest ambient
+  - "meditation/sleep/zen" → Ocean waves, Water flowing
+  - default → Rain forest, Ocean nature, Forest stream
 - **AI caption generation**: `generate_ai_caption(topic)` receives topic to craft appropriate persona (productivity focus for study music, calming tone for meditation, natural/ambient for nature sounds)
 - **YouTube category & tags**: Dynamic selection of category ID (10=Music, 39=Wellness) and tags based on topic keywords
 - **Pass topic to all functions**: Ensure consistency across music/visual/upload stages (see `main.py` showing `topic=today_topic` parameter)
 
 ### 2. External API Management & Fallback Strategies
-Two primary APIs with different characteristics:
+Three APIs with different characteristics:
 - **Wikimedia Commons API** (`get_wikimedia_search_url`): Free, no authentication required; returns OGG audio files; custom user-agent header required; gracefully handles partial results with `random.choice()`
+- **Pexels Videos API** (`get_nature_video`): Requires `PEXELS_API_KEY` env var; fetches real nature videos (rain, ocean, forest); returns multiple quality options; selects 720p+ when available; **graceful fallback to animated background if API fails or key missing**
 - **Google Generative AI** (`generate_ai_caption`): **Auto-detects available model** (priority: flash > pro > first available); gracefully falls back to `get_manual_caption()` template if API key missing or quota exhausted
 
 ### 3. Video Format Transformation
 **Current Format:**
 - **Format**: Landscape 1920x1080 (16:9), 10 minutes (600 seconds), audio-primary content
-- **Visual approach**: Animated background with moving orbs and waves + topic text overlay
-- **Audio focus**: Music IS the primary content; animated visuals are secondary
-- **Duration handling**: If music is shorter than 10 minutes, `concatenate_audioclips()` loops the audio to fill the full duration
-- **FPS Optimization**: Renders at 12 FPS (optimized for speed) instead of 24 FPS
+- **Visual approach**: Real nature/scape video from Pexels (rain, ocean, forest) OR animated background with topic text overlay
+- **Background sourcing**: 
+  - `get_nature_video(topic)` fetches real videos from Pexels API based on genre keywords
+  - Fallback to `make_animated_background()` if Pexels API fails or no video key configured
+- **Audio focus**: Music IS the primary content; video visuals are background with text overlay
+- **Duration handling**: If music or video is shorter than 10 minutes, uses `concatenate_audioclips()` or `concatenate_videoclips()` to loop and fill full duration
+- **FPS Optimization**: Renders at 12 FPS (optimized for speed)
 
 ### 4. Error Handling Philosophy
 - **Silent failures with fallbacks**: `try/except` blocks pass silently or return `None` rather than crash
