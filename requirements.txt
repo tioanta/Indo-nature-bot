@@ -4,3 +4,4 @@ google-auth-httplib2
 requests
 moviepy==1.0.3
 google-generativeai>=0.7.2
+Pillow

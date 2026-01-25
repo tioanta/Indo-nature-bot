@@ -1,7 +1,9 @@
 import os
 import requests
 import random
-from moviepy.editor import VideoFileClip, AudioFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip, ColorClip, TextClip, CompositeVideoClip, concatenate_audioclips
+from PIL import Image, ImageDraw
+import io
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
@@ -26,93 +28,101 @@ def get_wikimedia_search_url(query):
         print(f"   Gagal mencari API untuk {query}: {e}")
     return None
 
-def get_pexels_video(topic="Nature Scenery", orientation="portrait"):
-    headers = {"Authorization": PEXELS_API_KEY}
-    print(f"1. Searching Pexels for: {topic}")
-    url = f"https://api.pexels.com/videos/search?query={topic}&per_page=15&orientation={orientation}"
+def get_relaxing_music(topic):
+    print(f"   Mencari musik relaxing/focusing untuk: {topic}...")
     
-    try:
-        r = requests.get(url, headers=headers)
-        data = r.json()
-        if not data.get('videos'): return None
-        
-        # Pilih video random & utamakan HD
-        video_files = random.choice(data['videos'])['video_files']
-        valid_files = [v for v in video_files if v['width'] >= 720] or video_files
-        download_url = valid_files[0]['link']
-        
-        print(f"   Downloading video...")
-        with open("input_video.mp4", 'wb') as f:
-            f.write(requests.get(download_url).content)
-        return "input_video.mp4"
-    except Exception as e:
-        print(f"Error Pexels: {e}")
-        return None
-
-def get_background_music(topic):
-    print(f"2. Mencari Musik yang cocok untuk: {topic}...")
-    
-    # --- LOGIKA PEMILIHAN MUSIK ---
+    # --- LOGIKA PEMILIHAN MUSIK RELAXING ---
     topic_lower = topic.lower()
     
-    if "soccer" in topic_lower or "football" in topic_lower or "futsal" in topic_lower:
-        keywords = ["Energetic Rock ogg", "Sport action music ogg", "Upbeat drum ogg"]
-        print("   -> Mode: SPORT / SEMANGAT")
+    if "lofi" in topic_lower or "study" in topic_lower or "focus" in topic_lower or "work" in topic_lower:
+        keywords = ["Lofi music ogg", "Chill beats ogg", "Study music ogg", "Hip hop beats ogg"]
+        print("   -> Mode: LOFI / STUDY")
         
-    elif "anime" in topic_lower or "japan" in topic_lower or "tokyo" in topic_lower:
-        keywords = ["Electronic upbeat ogg", "Techno music ogg", "Synthesizer pop ogg"]
-        print("   -> Mode: ANIME / JEPANG")
+    elif "meditation" in topic_lower or "sleep" in topic_lower or "zen" in topic_lower or "stress" in topic_lower:
+        keywords = ["Meditation music ogg", "Relaxing ambient ogg", "Calm music ogg", "Piano relaxing ogg"]
+        print("   -> Mode: MEDITATION / RELAXATION")
         
-    else: # Default (Nature)
-        keywords = ["Erik Satie Gymnopedie ogg", "Piano relaxing ogg", "Nature ambient ogg"]
-        print("   -> Mode: SANTAI / ALAM")
+    else: # Default (Nature Sounds)
+        keywords = ["Rain sounds ogg", "Ocean waves ogg", "Nature ambient ogg", "Forest sounds ogg"]
+        print("   -> Mode: NATURE SOUNDS")
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
     
     # Coba cari lagu
     for keyword in random.sample(keywords, len(keywords)):
-        print(f"   Mencari lagu: '{keyword}'")
+        print(f"   Mencari: '{keyword}'")
         music_url = get_wikimedia_search_url(keyword)
         if music_url:
-            r = requests.get(music_url, headers=headers, stream=True)
-            if r.status_code == 200:
-                with open("bg_music.ogg", 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
-                if os.path.getsize("bg_music.ogg") > 20000: return "bg_music.ogg"
+            try:
+                r = requests.get(music_url, headers=headers, stream=True, timeout=10)
+                if r.status_code == 200:
+                    with open("bg_music.ogg", 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
+                    if os.path.getsize("bg_music.ogg") > 100000: return "bg_music.ogg"
+            except:
+                continue
     return None
 
-def process_video(input_video_path, topic):
-    output_file = "final_short.mp4"
+def create_music_video(music_path, topic, duration=1200):
+    """Membuat video musik 20 menit (1200 detik) dengan background visual minimal"""
+    output_file = "final_music_video.mp4"
+    
     try:
-        video_clip = VideoFileClip(input_video_path)
-    except: return None
-    
-    # Potong 15 detik & Crop Vertikal
-    duration = min(video_clip.duration, 15)
-    video_clip = video_clip.subclip(0, duration)
-    if video_clip.w > video_clip.h:
-        video_clip = video_clip.crop(x1=video_clip.w/2 - video_clip.h*9/32, width=video_clip.h*9/16, height=video_clip.h)
-    
-    # Tambah Audio Sesuai Topik
-    audio_path = get_background_music(topic)
-    final_clip = video_clip
-    
-    if audio_path:
+        # Load musik
+        audio_clip = AudioFileClip(music_path)
+        actual_duration = min(audio_clip.duration, duration)  # Max 20 menit
+        
+        print(f"   Durasi musik: {actual_duration//60:.1f} menit")
+        
+        # Jika musik lebih pendek dari 20 menit, loop-kan
+        if audio_clip.duration < actual_duration:
+            loops = int(actual_duration / audio_clip.duration) + 1
+            audio_list = [audio_clip] * loops
+            audio_clip = concatenate_audioclips(audio_list).subclip(0, actual_duration)
+        else:
+            audio_clip = audio_clip.subclip(0, actual_duration)
+        
+        # Buat warna background menggunakan topic
+        topic_lower = topic.lower()
+        if "lofi" in topic_lower or "study" in topic_lower:
+            bg_color = (26, 26, 46)  # Dark blue
+        elif "meditation" in topic_lower or "sleep" in topic_lower:
+            bg_color = (20, 40, 50)  # Dark teal
+        else:
+            bg_color = (15, 35, 60)  # Deep blue
+        
+        # Buat background video (warna solid dengan subtitle)
+        background = ColorClip(size=(1920, 1080), color=bg_color).set_duration(actual_duration)
+        
+        # Tambahkan text judul di tengah
         try:
-            audio_clip = AudioFileClip(audio_path)
-            if audio_clip.duration < duration:
-                from moviepy.audio.AudioClip import CompositeAudioClip
-                loops = int(duration / audio_clip.duration) + 1
-                audio_clip = CompositeAudioClip([audio_clip.set_start(i*audio_clip.duration) for i in range(loops)])
-            
-            final_clip = video_clip.set_audio(audio_clip.subclip(0, duration).volumex(0.8))
-        except: pass
+            title_text = TextClip(topic, fontsize=80, color='white', font='Arial')
+            title_text = title_text.set_position('center').set_duration(actual_duration)
+            final_clip = CompositeVideoClip([background, title_text])
+        except:
+            final_clip = background
+        
+        # Set audio
+        final_clip = final_clip.set_audio(audio_clip.volumex(0.9))
+        
+        print("   Rendering musik video (20 menit)...")
+        final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", 
+                                   preset="ultrafast", fps=24, verbose=False, logger=None)
+        
+        # Cleanup
+        try:
+            audio_clip.close()
+            if os.path.exists(music_path):
+                os.remove(music_path)
+        except:
+            pass
+        
+        return output_file
+        
+    except Exception as e:
+        print(f"   ❌ Error membuat musik video: {e}")
+        return None
 
-    print("3. Rendering Final Video...")
-    final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac", preset="ultrafast")
-    
-    try:
-        video_clip.close()
-        if audio_path: os.remove(audio_path)
-    except: pass
-    return output_file
+
+
+

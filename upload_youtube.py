@@ -7,15 +7,16 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 def get_manual_caption(topic):
-    """Caption cadangan jika AI mati total"""
-    emojis = ["🔥", "✨", "😱", "🔴", "✅"]
+    """Caption cadangan jika AI mati total - untuk konten musik relaxing"""
+    emojis = ["🎵", "😌", "✨", "🧘", "🎧"]
     
-    if "soccer" in topic.lower() or "football" in topic.lower():
-        return f"Momen Gila Sepakbola! {topic} ⚽ {random.choice(emojis)}", f"Aksi terbaik {topic} hari ini. Jangan lupa subscribe! #Football #Shorts"
-    elif "anime" in topic.lower() or "japan" in topic.lower():
-        return f"Jepang Keren Banget! {topic} 🇯🇵 {random.choice(emojis)}", f"Suasana {topic} yang wajib kamu lihat. #Anime #Japan #Shorts"
+    topic_lower = topic.lower()
+    if "lofi" in topic_lower or "study" in topic_lower or "focus" in topic_lower or "work" in topic_lower:
+        return f"{topic} 🎧 {random.choice(emojis)}", f"Musik berkualitas untuk fokus dan produktivitas 20 menit. Subscribe untuk lebih banyak konten! #LofiBeats #StudyMusic #FocusMusic"
+    elif "meditation" in topic_lower or "sleep" in topic_lower or "relax" in topic_lower or "zen" in topic_lower:
+        return f"{topic} 🧘 {random.choice(emojis)}", f"Musik meditasi dan relaksasi untuk istirahat. Sempurna untuk tidur dan stress relief. #MeditationMusic #RelaxingMusic #SleepMusic"
     else:
-        return f"Pemandangan Indah: {topic} 🌍 {random.choice(emojis)}", f"Healing sejenak melihat {topic}. #Nature #Travel #Shorts"
+        return f"{topic} 🌿 {random.choice(emojis)}", f"Suara alam untuk ketenangan dan healing 20 menit. Subscribe untuk konten relaxing lainnya! #NatureSounds #AmbientMusic #CalmMusic"
 
 def generate_ai_caption(topic):
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -61,10 +62,19 @@ def generate_ai_caption(topic):
         model = genai.GenerativeModel(chosen_model_name)
         
         prompt = f"""
-        Kamu adalah YouTuber profesional. Topik: "{topic}".
-        Buatkan Judul (Max 60 char, Clickbait, Emoji) dan Deskripsi (2 kalimat seru + Hashtags).
+        Kamu adalah content creator musik relaxing & fokus profesional untuk YouTube.
+        Topik: "{topic}" (durasi 20 menit).
+        
+        Buatkan Judul (Max 60 char dengan emoji musik) dan Deskripsi (2-3 kalimat + hashtags relaksasi/fokus).
+        
         Output WAJIB JSON: {{"title": "...", "description": "..."}}
-        Peran: Jika bola jadilah komentator, jika alam jadilah puitis, jika anime jadilah wibu.
+        
+        Instruksi konten:
+        - Jika topik mengandung: lofi/study/focus/work → jadilah musik untuk belajar (motivasi, produktivitas)
+        - Jika topik mengandung: meditation/sleep/zen/relax → jadilah musik untuk meditasi/tidur (menenangkan, healing)
+        - Jika topik mengandung: nature/rain/forest/ocean → jadilah ambient (natural, menenangkan)
+        - Gunakan emoji musik (🎵🎧😌🧘✨) untuk deskripsi
+        - Sertakan hashtag yang relevan seperti #LofiBeats #StudyMusic #MeditationMusic #RelaxingMusic
         """
         
         response = model.generate_content(prompt)
@@ -91,12 +101,28 @@ def upload_video(file_path, topic):
         creds = Credentials.from_authorized_user_info(json.loads(token_json))
         youtube = build('youtube', 'v3', credentials=creds)
 
+        # Tentukan category ID berdasarkan topic (Music = 10, Wellness = 39)
+        topic_lower = topic.lower()
+        if any(word in topic_lower for word in ['lofi', 'study', 'focus', 'work', 'meditation', 'sleep', 'relax', 'zen']):
+            category_id = '10'  # Music category
+        else:
+            category_id = '39'  # Wellness & relaxation
+        
+        # Tentukan tags berdasarkan topic
+        default_tags = ['Music', 'Relaxing', '20 minutes']
+        if 'lofi' in topic_lower or 'study' in topic_lower:
+            tags = default_tags + ['LofiBeats', 'StudyMusic', 'FocusMusic']
+        elif 'meditation' in topic_lower or 'sleep' in topic_lower:
+            tags = default_tags + ['MeditationMusic', 'SleepMusic', 'Relaxation']
+        else:
+            tags = default_tags + ['AmbientMusic', 'NatureSounds', 'CalmMusic']
+        
         body = {
             'snippet': {
                 'title': title_ai,
                 'description': desc_ai,
-                'tags': ['Shorts', topic, 'Viral'],
-                'categoryId': '22'
+                'tags': tags,
+                'categoryId': category_id
             },
             'status': {'privacyStatus': 'public', 'selfDeclaredMadeForKids': False}
         }
