@@ -72,14 +72,14 @@ def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
     
     # Tentukan color palette berdasarkan genre
     if "lofi" in topic_lower or "study" in topic_lower:
-        base_color = np.array([26, 26, 46])  # Dark blue
-        accent_colors = [np.array([70, 130, 180]), np.array([100, 149, 237])]  # Steel blue, Cornflower
+        base_color = np.array([26, 26, 46], dtype=np.uint8)  # Dark blue
+        accent_colors = [np.array([70, 130, 180], dtype=np.uint8), np.array([100, 149, 237], dtype=np.uint8)]
     elif "meditation" in topic_lower or "sleep" in topic_lower:
-        base_color = np.array([20, 40, 50])  # Dark teal
-        accent_colors = [np.array([70, 130, 150]), np.array([100, 150, 180])]  # Teal shades
+        base_color = np.array([20, 40, 50], dtype=np.uint8)  # Dark teal
+        accent_colors = [np.array([70, 130, 150], dtype=np.uint8), np.array([100, 150, 180], dtype=np.uint8)]
     else:  # Nature sounds
-        base_color = np.array([15, 35, 60])  # Deep blue
-        accent_colors = [np.array([60, 120, 140]), np.array([80, 150, 170])]  # Ocean colors
+        base_color = np.array([15, 35, 60], dtype=np.uint8)  # Deep blue
+        accent_colors = [np.array([60, 120, 140], dtype=np.uint8), np.array([80, 150, 170], dtype=np.uint8)]
     
     def make_frame(t):
         """Generate frame dengan animasi"""
@@ -88,8 +88,9 @@ def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
         # Base gradient background
         for y in range(height):
             ratio = y / height
-            color = base_color.astype(float) + (accent_colors[0].astype(float) - base_color.astype(float)) * ratio * 0.3
-            frame[y, :] = color.astype(np.uint8)
+            color = (base_color.astype(float) + 
+                    (accent_colors[0].astype(float) - base_color.astype(float)) * ratio * 0.3)
+            frame[y, :] = np.clip(color, 0, 255).astype(np.uint8)
         
         # Animated orbs/circles yang bergerak
         num_orbs = 4
@@ -99,33 +100,55 @@ def make_animated_background(duration, topic, width=1920, height=1080, fps=24):
             x = int(width / 2 + 300 * np.cos(phase))
             y = int(height / 2 + 200 * np.sin(phase * 0.7))
             
+            # Clamp position ke dalam bounds
+            x = max(0, min(x, width - 1))
+            y = max(0, min(y, height - 1))
+            
             # Radius dan opacity berubah-ubah
             radius = int(80 + 40 * np.sin(t * 0.5 + i))
+            radius = max(1, min(radius, 300))  # Clamp radius
             alpha = int(100 + 100 * np.sin(t * 0.4 + i * 2))
+            alpha = max(1, min(alpha, 200))
             
-            # Draw circle dengan gradient
+            # Draw circle dengan gradient - safer approach
             color = accent_colors[i % len(accent_colors)]
-            for dy in range(-radius, radius):
-                for dx in range(-radius, radius):
-                    ny, nx = y + dy, x + dx
-                    dist = np.sqrt(dx**2 + dy**2)
-                    if dist < radius and 0 <= ny < height and 0 <= nx < width:
-                        # Fade effect from center
-                        fade = max(0, 1 - dist / radius)
-                        intensity = int(alpha * fade * 0.01)
-                        frame[ny, nx] = (frame[ny, nx].astype(float) * (255 - intensity) + 
-                                       color.astype(float) * intensity) / 255
+            
+            # Create mesh grid untuk circle
+            yy, xx = np.ogrid[-radius:radius+1, -radius:radius+1]
+            dist = np.sqrt(xx**2 + yy**2)
+            
+            # Hanya draw bagian yang dalam bounds
+            for dy in range(-radius, radius+1):
+                ny = y + dy
+                if 0 <= ny < height:
+                    for dx in range(-radius, radius+1):
+                        nx = x + dx
+                        if 0 <= nx < width:
+                            dist_val = np.sqrt(dx**2 + dy**2)
+                            if dist_val < radius:
+                                fade = max(0, 1 - dist_val / radius)
+                                intensity = int(alpha * fade * 0.01)
+                                intensity = max(0, min(intensity, 255))
+                                frame[ny, nx] = (
+                                    frame[ny, nx].astype(float) * (255 - intensity) / 255 +
+                                    color.astype(float) * intensity / 255
+                                ).astype(np.uint8)
         
         # Animated lines/waves effect
         wave_speed = t * 2
         for x in range(0, width, 100):
-            y = int(height / 2 + 100 * np.sin((x / width) * np.pi * 2 + wave_speed))
+            y_offset = int(100 * np.sin((x / width) * np.pi * 2 + wave_speed))
+            y = int(height / 2 + y_offset)
+            
             if 0 <= y < height:
                 cv = accent_colors[0]
                 for dy in range(-2, 3):
-                    if 0 <= y + dy < height:
-                        frame[y + dy, x] = (frame[y + dy, x].astype(float) * 0.6 + 
-                                          cv.astype(float) * 0.4).astype(np.uint8)
+                    ny = y + dy
+                    if 0 <= ny < height:
+                        frame[ny, x] = (
+                            frame[ny, x].astype(float) * 0.6 +
+                            cv.astype(float) * 0.4
+                        ).astype(np.uint8)
         
         return frame
     
