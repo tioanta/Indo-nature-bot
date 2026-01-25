@@ -70,16 +70,19 @@ def create_music_video(music_path, topic, duration=1200):
     try:
         # Load musik
         audio_clip = AudioFileClip(music_path)
-        actual_duration = min(audio_clip.duration, duration)  # Max 20 menit
+        actual_duration = duration  # Always 1200 detik (20 menit)
         
-        print(f"   Durasi musik: {actual_duration//60:.1f} menit")
+        print(f"   Target durasi video: {actual_duration//60:.1f} menit")
+        print(f"   Durasi musik asli: {audio_clip.duration//60:.1f} menit")
         
         # Jika musik lebih pendek dari 20 menit, loop-kan
         if audio_clip.duration < actual_duration:
+            print(f"   Musik lebih pendek, melakukan looping...")
             loops = int(actual_duration / audio_clip.duration) + 1
             audio_list = [audio_clip] * loops
             audio_clip = concatenate_audioclips(audio_list).subclip(0, actual_duration)
         else:
+            print(f"   Musik cukup panjang, memotong ke 20 menit...")
             audio_clip = audio_clip.subclip(0, actual_duration)
         
         # Buat warna background menggunakan topic
