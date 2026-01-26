@@ -109,6 +109,7 @@ def get_music(topic):
     }
     
     for kw in keywords:
+        temp_filename = "bg_music.ogg"
         try:
             # 1. Cari URL file page
             search_url = "https://commons.wikimedia.org/w/api.php"
@@ -130,32 +131,37 @@ def get_music(topic):
             print(f"      ⬇️ Downloading: {kw}...")
             r_audio = requests.get(file_url, headers=headers, stream=True, timeout=20)
             
-            temp_filename = "bg_music.ogg"
             with open(temp_filename, 'wb') as f:
                 for chunk in r_audio.iter_content(chunk_size=8192):
                     f.write(chunk)
             
             # Cek size (minimal 50KB agar bukan file error)
-            if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 50000:
-                # Validasi bahwa file bisa di-load oleh MoviePy
-                try:
-                    test_clip = AudioFileClip(temp_filename)
-                    test_duration = test_clip.duration
-                    test_clip.close()
-                    print(f"      ✅ Audio OK ({os.path.getsize(temp_filename)//1024} KB, duration: {test_duration:.1f}s)")
-                    return temp_filename
-                except Exception as audio_err:
-                    print(f"      ⚠️ Audio tidak bisa di-load MoviePy: {audio_err}")
-                    if os.path.exists(temp_filename):
-                        os.remove(temp_filename)
-                    continue
-            else:
+            if not (os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 50000):
                 print("      ❌ File terlalu kecil/corrupt.")
+                if os.path.exists(temp_filename):
+                    os.remove(temp_filename)
+                continue
+            
+            # Validasi bahwa file bisa di-load oleh MoviePy
+            try:
+                test_clip = AudioFileClip(temp_filename)
+                test_duration = test_clip.duration
+                test_clip.close()
+                print(f"      ✅ Audio OK ({os.path.getsize(temp_filename)//1024} KB, duration: {test_duration:.1f}s)")
+                return temp_filename
+            except Exception as audio_err:
+                print(f"      ⚠️ Audio corrupt: {str(audio_err)[:60]}")
+                if os.path.exists(temp_filename):
+                    os.remove(temp_filename)
+                continue
                 
         except Exception as e:
-            print(f"      ⚠️ Error music search: {e}")
+            print(f"      ⚠️ Error music search: {str(e)[:60]}")
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
             continue
-            
+    
+    print(f"   ⚠️ Semua musik gagal, akan gunakan audio kosong")
     return None
 
 # --- 3. PENCARIAN VIDEO ---
@@ -222,40 +228,52 @@ def create_short_video(topic, use_vo=True, duration=58):
         
         clip = clip.subclip(0, duration)
 
-        # B. Audio Processing (VO + Music)
+        # B. Audio Processing (VO + Music) dengan Safe Loading
         audio_tracks = []
+        vo_clip = None
+        bg_music = None
         
         # 1. Voice Over
         if use_vo:
             vo_path = get_voice_over_sync(topic)
-            if vo_path:
-                vo_clip = AudioFileClip(vo_path)
-                # Jika VO lebih panjang dari video, potong VO (jarang terjadi karena limit 60 kata)
-                # Jika VO lebih pendek, biarkan.
-                audio_tracks.append(vo_clip.set_start(1)) # Mulai detik ke-1
+            if vo_path and os.path.exists(vo_path):
+                try:
+                    vo_clip = AudioFileClip(vo_path)
+                    audio_tracks.append(vo_clip.set_start(1)) # Mulai detik ke-1
+                except Exception as e:
+                    print(f"   ⚠️ Voice Over load error: {e}, skip VO")
+                    vo_clip = None
         
-        # 2. Background Music
+        # 2. Background Music dengan ROBUST loading
         music_path = get_music(topic)
-        if music_path:
-            bg_music = AudioFileClip(music_path)
-            # Loop music
-            if bg_music.duration < duration:
-                loops = int(duration / bg_music.duration) + 1
-                bg_music = concatenate_audioclips([bg_music]*loops)
-            bg_music = bg_music.subclip(0, duration)
-            
-            # **DUCKING**: Jika ada VO, kecilkan volume musik
-            if use_vo and len(audio_tracks) > 0:
-                bg_music = bg_music.volumex(0.15) # Volume 15% kalau ada VO
-            else:
-                bg_music = bg_music.volumex(0.8) # Volume 80% kalau instrumental
+        if music_path and os.path.exists(music_path):
+            try:
+                bg_music = AudioFileClip(music_path)
+                # Loop music
+                if bg_music.duration < duration:
+                    loops = int(duration / bg_music.duration) + 1
+                    bg_music = concatenate_audioclips([bg_music]*loops)
+                bg_music = bg_music.subclip(0, duration)
                 
-            audio_tracks.append(bg_music)
+                # **DUCKING**: Jika ada VO, kecilkan volume musik
+                if use_vo and vo_clip is not None:
+                    bg_music = bg_music.volumex(0.15) # Volume 15% kalau ada VO
+                else:
+                    bg_music = bg_music.volumex(0.8) # Volume 80% kalau instrumental
+                    
+                audio_tracks.append(bg_music)
+            except Exception as e:
+                print(f"   ⚠️ Background music load error: {e}, skip music")
+                bg_music = None
         
-        # Gabungkan Audio
+        # Gabungkan Audio (jika ada track)
         if audio_tracks:
-            final_audio = CompositeAudioClip(audio_tracks)
-            clip = clip.set_audio(final_audio)
+            try:
+                final_audio = CompositeAudioClip(audio_tracks)
+                clip = clip.set_audio(final_audio)
+            except Exception as e:
+                print(f"   ⚠️ Audio composite error: {e}, render video tanpa audio")
+                pass
 
         # C. Text Title (Opsional, Simple)
         try:
@@ -269,15 +287,34 @@ def create_short_video(topic, use_vo=True, duration=58):
             print("   ⚠️ Text render skip")
             final_video = clip
         
-        # D. Write File
+        # D. Write File dengan Error Handling
         print("   🚀 Rendering Final Video...")
-        final_video.write_videofile(output_file, fps=24, codec="libx264", audio_codec="aac", 
-                                    preset="ultrafast", verbose=False, logger=None)
+        try:
+            final_video.write_videofile(output_file, fps=24, codec="libx264", audio_codec="aac", 
+                                        preset="ultrafast", verbose=False, logger=None)
+        except Exception as render_err:
+            print(f"   ⚠️ Render error: {render_err}")
+            print("   🔄 Retrying dengan simpler settings...")
+            try:
+                # Fallback: render tanpa audio codec khusus
+                final_video.write_videofile(output_file, fps=24, codec="libx264", 
+                                            preset="ultrafast", verbose=False, logger=None)
+            except Exception as retry_err:
+                print(f"   ❌ Render final gagal: {retry_err}")
+                return None
         
         # Cleanup
-        clip.close()
-        if 'vo_clip' in locals(): vo_clip.close()
-        if 'bg_music' in locals(): bg_music.close()
+        if clip: clip.close()
+        if vo_clip: vo_clip.close()
+        if bg_music: bg_music.close()
+        
+        # Remove temp files
+        for tmp_file in ["raw_video.mp4", "bg_music.ogg", "voice_over.mp3"]:
+            if os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except:
+                    pass
         
         return output_file
 
@@ -285,4 +322,12 @@ def create_short_video(topic, use_vo=True, duration=58):
         print(f"   ❌ CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Emergency cleanup
+        for tmp_file in ["raw_video.mp4", "bg_music.ogg", "voice_over.mp3"]:
+            if os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except:
+                    pass
         return None
