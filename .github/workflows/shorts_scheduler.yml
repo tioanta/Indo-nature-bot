@@ -1,0 +1,34 @@
+name: Daily Shorts Uploader (MU, Japan, Mecca)
+
+on:
+  schedule:
+    # Jalan 3 kali sehari.
+    # Jam di GitHub Actions menggunakan UTC. 
+    # UTC: 01:00 (08:00 WIB), 08:00 (15:00 WIB), 13:00 (20:00 WIB)
+    - cron: '0 1,8,13 * * *'
+  workflow_dispatch: # Untuk test manual
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get install imagemagick
+
+      - name: Run Shorts Generator
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python main_shorts.py
