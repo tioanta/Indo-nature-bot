@@ -1,3 +1,10 @@
+import warnings
+import sys
+
+# Suppress deprecation warnings dari Google libraries untuk Python 3.9
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
 import generate_shorts
 import upload_shorts
 import random

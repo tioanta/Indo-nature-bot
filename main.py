@@ -1,3 +1,9 @@
+import warnings
+
+# Suppress deprecation warnings dari Google libraries untuk Python 3.9
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
 import generate_video
 import upload_youtube
 import random
