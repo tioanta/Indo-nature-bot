@@ -1,42 +1,30 @@
 import os
 import requests
 import random
-import numpy as np
-from PIL import Image
-
-# === FIX 1: PATCH PILLOW SEBELUM IMPORT MOVIEPY ===
-# Patch ini WAJIB diletakkan sebelum 'import moviepy'
-if not hasattr(Image, 'ANTIALIAS'):
-    try:
-        from PIL.Image import Resampling
-        Image.ANTIALIAS = Resampling.LANCZOS
-    except ImportError:
-        Image.ANTIALIAS = Image.LANCZOS
-# ==================================================
-
-# Baru import moviepy setelah di-patch
+import time
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip, concatenate_videoclips, concatenate_audioclips
 import json
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
 def get_music(topic):
-    """Cari musik singkat yang sesuai vibe dengan Error Handling ketat"""
+    """Cari musik dengan User-Agent agar tidak diblokir"""
     print(f"   [Shorts] Mencari BGM untuk: {topic}")
     topic_lower = topic.lower()
     
+    # Keyword mapping
     if "manchester" in topic_lower or "football" in topic_lower:
-        keywords = ["Epic sport cinematic ogg", "Stadium drums ogg", "Energetic rock ogg"]
+        keywords = ["Epic sport cinematic ogg", "Stadium atmosphere ogg", "Energetic rock ogg"]
     elif "masjid" in topic_lower or "makkah" in topic_lower:
-        keywords = ["Middle eastern ambient ogg", "Islamic ney flute ogg", "Desert wind ambient ogg"]
+        keywords = ["Islamic call to prayer ambient ogg", "Middle eastern ney ogg", "Desert wind ogg"]
     elif "japan" in topic_lower or "tokyo" in topic_lower:
-        keywords = ["Lofi japan ogg", "City pop instrumental ogg", "Koto ambient ogg", "Rain jazz ogg"]
+        keywords = ["Lofi japan ogg", "City rain ambient ogg", "Japanese koto ogg"]
     else:
         keywords = ["Cinematic ambient ogg"]
 
     api_url = "https://commons.wikimedia.org/w/api.php"
-    # User-Agent unik agar tidak diblokir Wikimedia
-    headers = {'User-Agent': 'IndoNatureBot/2.0 (github.com/tioanta; contact@example.com)'}
+    # User-Agent SANGAT PENTING agar download tidak 0 bytes
+    headers = {'User-Agent': 'IndoNatureBot/2.1 (contact@example.com)'}
     
     for kw in keywords:
         params = {"action": "query", "format": "json", "generator": "search", "gsrsearch": kw, "gsrnamespace": 6, "prop": "imageinfo", "iiprop": "url"}
@@ -47,75 +35,64 @@ def get_music(topic):
             if "query" in data and "pages" in data["query"]:
                 pages = list(data["query"]["pages"].values())
                 if pages:
-                    # Ambil URL audio
                     url = pages[0]["imageinfo"][0]["url"]
-                    print(f"      Downloading audio dari: {url[:50]}...")
+                    print(f"      Downloading audio: {url[:60]}...")
                     
-                    # Download dengan Stream
-                    r_audio = requests.get(url, stream=True, headers=headers, timeout=20)
-                    
-                    if r_audio.status_code == 200:
+                    # Download dengan retry sederhana
+                    try:
+                        r_audio = requests.get(url, stream=True, headers=headers, timeout=20)
                         temp_filename = "bg_shorts.ogg"
+                        
                         with open(temp_filename, 'wb') as f:
                             for chunk in r_audio.iter_content(chunk_size=1024): 
                                 f.write(chunk)
                         
-                        # === FIX 2: VALIDASI FILE AUDIO ===
-                        # Cek apakah file berhasil terdownload dan ukurannya masuk akal (> 10KB)
+                        # VALIDASI UKURAN FILE (Minimal 10KB)
                         if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 10000:
-                            print(f"      Audio OK ({os.path.getsize(temp_filename) // 1024} KB)")
+                            print(f"      ✓ Audio Valid ({os.path.getsize(temp_filename)//1024} KB)")
                             return temp_filename
                         else:
-                            print("      ❌ File audio kosong atau corrupt, mencari keyword lain...")
-                    else:
-                        print(f"      ❌ Gagal download (Status: {r_audio.status_code})")
+                            print("      ❌ File audio corrupt/kosong, coba keyword lain...")
+                    except Exception as dl_err:
+                        print(f"      ❌ Gagal download file: {dl_err}")
+                        
         except Exception as e:
-            print(f"      ⚠️ Error saat search audio '{kw}': {e}")
-            continue
+            print(f"      ⚠️ Error search: {e}")
             
-    print("   ❌ Tidak menemukan audio yang valid.")
+    print("   ❌ Gagal mendapatkan audio yang valid.")
     return None
 
 def get_vertical_video(topic):
-    """Cari video Pexels dengan orientasi PORTRAIT"""
     print(f"   [Shorts] Mencari Video Vertical: {topic}")
-    
-    if not PEXELS_API_KEY:
-        print("   ⚠️ PEXELS_API_KEY Missing!")
-        return None
-        
     headers = {"Authorization": PEXELS_API_KEY}
     
+    # Query mapping
     topic_lower = topic.lower()
-    if "manchester" in topic_lower:
-        query = "football stadium"
-    elif "masjid" in topic_lower:
-        query = "mosque architecture"
-    elif "japan" in topic_lower:
-        query = "Tokyo street night"
-    else:
-        query = topic
+    if "manchester" in topic_lower: query = "football fans stadium"
+    elif "masjid" in topic_lower: query = "islamic architecture"
+    elif "japan" in topic_lower: query = "tokyo street night rain"
+    else: query = topic
 
-    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=5"
+    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=8"
     
     try:
         r = requests.get(url, headers=headers, timeout=15)
         data = r.json()
         if data.get('videos'):
-            video = random.choice(data['videos'])
-            files = video['video_files']
-            # Prioritaskan Vertical & HD
-            vertical_files = [v for v in files if v['width'] < v['height'] and v['width'] >= 720]
-            target_file = vertical_files[0] if vertical_files else files[0]
+            # Filter video yang benar-benar vertical (width < height)
+            vertical_vids = [v for v in data['videos'] if v['width'] < v['height']]
+            if not vertical_vids: vertical_vids = data['videos']
             
-            download_url = target_file['link']
-            print(f"      Downloading video: {download_url[:50]}...")
+            video = random.choice(vertical_vids)
+            hd_files = [f for f in video['video_files'] if f['height'] >= 1080 and f['width'] < f['height']]
+            target = hd_files[0] if hd_files else video['video_files'][0]
             
-            r_vid = requests.get(download_url, timeout=30)
-            if r_vid.status_code == 200:
-                with open("raw_shorts.mp4", 'wb') as f:
-                    f.write(r_vid.content)
-                return "raw_shorts.mp4"
+            print(f"      Downloading video ({target['width']}x{target['height']})...")
+            r_vid = requests.get(target['link'], timeout=40)
+            
+            with open("raw_shorts.mp4", 'wb') as f:
+                f.write(r_vid.content)
+            return "raw_shorts.mp4"
     except Exception as e:
         print(f"Error Pexels: {e}")
     return None
@@ -126,74 +103,62 @@ def create_short_video(music_path, topic, duration=58):
     clip = None
     
     try:
-        # 1. AUDIO PROCESSING (Safe Mode)
+        # 1. AUDIO
         try:
             audio = AudioFileClip(music_path)
-            # Cek durasi audio valid
-            if audio.duration < 1:
-                raise Exception("Durasi audio terlalu pendek/corrupt")
-                
             if audio.duration < duration:
                 loops = int(duration / audio.duration) + 1
                 audio = concatenate_audioclips([audio]*loops)
             audio = audio.subclip(0, duration)
         except Exception as e:
-            print(f"   ❌ Gagal memproses file audio: {e}")
-            # Jika audio gagal, script akan berhenti di sini daripada crash total
+            print(f"   ❌ Audio Error: {e}")
             return None
 
-        # 2. VIDEO PROCESSING
+        # 2. VIDEO
         video_path = get_vertical_video(topic)
-        if not video_path: 
-            print("   ❌ Video background tidak ditemukan.")
-            if audio: audio.close()
-            return None
+        if not video_path: return None
         
         clip = VideoFileClip(video_path)
-        
         if clip.duration < duration:
             loops = int(duration / clip.duration) + 1
             clip = concatenate_videoclips([clip]*loops)
-        
         clip = clip.subclip(0, duration)
         
-        # Smart Crop 9:16
-        if clip.w / clip.h > 9/16: 
+        # 3. RESIZE & CROP (9:16)
+        if clip.w / clip.h > 9/16:
             clip = clip.resize(height=1920)
             clip = clip.crop(x1=clip.w/2 - 540, y1=0, width=1080, height=1920)
         else:
             clip = clip.resize(width=1080)
-            
-        # 3. TEXT OVERLAY
+
+        # 4. TEXT
         try:
-            # Menggunakan TextClip standard
-            txt = TextClip(topic, fontsize=50, color='white', font='Arial-Bold', 
-                          stroke_color='black', stroke_width=2, method='caption', size=(900, None))
-            txt = txt.set_position(('center', 1400)).set_duration(duration)
+            # Gunakan 'method="caption"' untuk auto-wrap text panjang
+            txt = TextClip(topic, fontsize=55, color='white', font='Arial-Bold', 
+                          stroke_color='black', stroke_width=3, method='caption', 
+                          size=(900, None), align='center')
+            txt = txt.set_position(('center', 1300)).set_duration(duration)
             final = CompositeVideoClip([clip, txt])
-        except Exception as e:
-            print(f"   ⚠️ Text error (Skip text): {e}")
+        except:
+            print("   ⚠️ Text gagal, lanjut tanpa text")
             final = clip
         
         final = final.set_audio(audio)
         
-        print("   Rendering final video (Shorts)...")
+        print("   Rendering Shorts...")
         final.write_videofile(output_file, fps=24, codec="libx264", audio_codec="aac", 
                               preset="ultrafast", verbose=False, logger=None)
         
         return output_file
         
     except Exception as e:
-        print(f"   ❌ CRITICAL ERROR Render: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"   ❌ RENDER FAILED: {e}")
         return None
     finally:
-        # Cleanup resource agar memory tidak bocor
+        # Bersih-bersih file temp
         try:
             if audio: audio.close()
             if clip: clip.close()
             if os.path.exists("raw_shorts.mp4"): os.remove("raw_shorts.mp4")
             if os.path.exists("bg_shorts.ogg"): os.remove("bg_shorts.ogg")
-        except:
-            pass
+        except: pass
