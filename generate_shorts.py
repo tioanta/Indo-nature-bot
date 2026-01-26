@@ -17,9 +17,35 @@ async def generate_voice_over(topic, output_file="voice_over.mp3"):
     """
     print(f"   🎙️ [VO] Membuat Naskah untuk: {topic}")
     
-    # A. Generate Naskah via Gemini
+    # A. Generate Naskah via Gemini dengan Auto-detect Model
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    
+    # Auto-detect available model (priority: flash > pro > first available)
+    chosen_model = None
+    try:
+        all_models = list(genai.list_models())
+        valid_models = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
+        
+        # Try priority: gemini-2.0-flash > gemini-1.5-flash > gemini-pro > gemini-1.0-pro
+        for priority_model in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro']:
+            for m in valid_models:
+                if priority_model in m:
+                    chosen_model = m
+                    break
+            if chosen_model:
+                break
+        
+        if not chosen_model and valid_models:
+            chosen_model = valid_models[0]
+        
+        if not chosen_model:
+            print("      ⚠️ Tidak ada model Gemini tersedia, gunakan script default")
+            chosen_model = None
+    except Exception as e:
+        print(f"      ⚠️ Error detect Gemini model: {e}")
+        chosen_model = None
+    
+    model = genai.GenerativeModel(chosen_model) if chosen_model else None
     
     prompt = f"""
     Buatkan naskah Voice Over pendek (maksimal 40 detik/60 kata) untuk video YouTube Shorts tentang: "{topic}".
@@ -27,13 +53,20 @@ async def generate_voice_over(topic, output_file="voice_over.mp3"):
     Langsung tulis naskahnya saja tanpa tanda kutip.
     """
     
-    try:
-        response = model.generate_content(prompt)
-        script = response.text.strip()
-        print(f"      📜 Naskah: {script[:50]}...")
-    except Exception as e:
-        print(f"      ⚠️ Gagal generate naskah: {e}")
+    script = None
+    if model:
+        try:
+            response = model.generate_content(prompt)
+            script = response.text.strip()
+            print(f"      📜 Naskah: {script[:50]}...")
+        except Exception as e:
+            print(f"      ⚠️ Gagal generate naskah: {e}")
+            script = None
+    
+    if not script:
+        # Fallback script
         script = f"Ini adalah video indah tentang {topic}. Nikmati pemandangannya."
+        print(f"      📜 Naskah (fallback): {script[:50]}...")
 
     # B. Convert Text to Speech (Bahasa Indonesia)
     # Voice Options: id-ID-GadisNeural, id-ID-ArdiNeural
@@ -104,8 +137,18 @@ def get_music(topic):
             
             # Cek size (minimal 50KB agar bukan file error)
             if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 50000:
-                print(f"      ✅ Audio OK ({os.path.getsize(temp_filename)//1024} KB)")
-                return temp_filename
+                # Validasi bahwa file bisa di-load oleh MoviePy
+                try:
+                    test_clip = AudioFileClip(temp_filename)
+                    test_duration = test_clip.duration
+                    test_clip.close()
+                    print(f"      ✅ Audio OK ({os.path.getsize(temp_filename)//1024} KB, duration: {test_duration:.1f}s)")
+                    return temp_filename
+                except Exception as audio_err:
+                    print(f"      ⚠️ Audio tidak bisa di-load MoviePy: {audio_err}")
+                    if os.path.exists(temp_filename):
+                        os.remove(temp_filename)
+                    continue
             else:
                 print("      ❌ File terlalu kecil/corrupt.")
                 
