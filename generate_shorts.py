@@ -60,12 +60,28 @@ async def generate_voice_over(topic, output_file="voice_over.mp3"):
             script = response.text.strip()
             print(f"      📜 Naskah: {script[:50]}...")
         except Exception as e:
-            print(f"      ⚠️ Gagal generate naskah: {e}")
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "429" in error_msg:
+                print(f"      ⚠️ Gemini quota exceeded, gunakan fallback script")
+            else:
+                print(f"      ⚠️ Gagal generate naskah: {e}")
             script = None
     
     if not script:
-        # Fallback script
-        script = f"Ini adalah video indah tentang {topic}. Nikmati pemandangannya."
+        # Fallback script per topic - lebih natural dan context-aware
+        topic_lower = topic.lower()
+        
+        if "manchester" in topic_lower:
+            script = "Selamat datang di Old Trafford, rumah legendaris Manchester United. Lihat keindahan stadion yang penuh sejarah dan atlet kelas dunia. Saksikan kehebatan Red Devils!"
+        elif "masjid" in topic_lower or "makkah" in topic_lower:
+            script = "Masjidil Haram adalah tempat suci yang dirindukan oleh jutaan umat muslim di seluruh dunia. Keindahan arsitektur dan ketenangan spiritual berpadu sempurna. Subhanallah!"
+        elif "japan" in topic_lower or "tokyo" in topic_lower:
+            script = "Jepang adalah negara yang memukau dengan budaya yang kaya dan teknologi canggih. Dari tradisional hingga modern, semuanya harmonis. Ayuk jelajahi keajaibannya!"
+        elif "kyoto" in topic_lower:
+            script = "Kyoto adalah jantung budaya Jepang dengan kuil-kuil bersejarah yang menakjubkan. Setiap sudut menceritakan kisah peradaban yang mendalam. Indah sekali!"
+        else:
+            script = f"Inilah momen istimewa untuk menjelajahi keindahan {topic}. Nikmati pengalaman visual yang memukau dan inspiratif. Jangan lewatkan!"
+        
         print(f"      📜 Naskah (fallback): {script[:50]}...")
 
     # B. Convert Text to Speech (Bahasa Indonesia)

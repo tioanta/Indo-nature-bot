@@ -5,10 +5,33 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
+def get_manual_caption(topic):
+    """Context-aware fallback caption tanpa API"""
+    topic_lower = topic.lower()
+    
+    if "manchester" in topic_lower:
+        title = "Glory Glory Man United! 🔴 #Shorts"
+        desc = "Semangat legendaris Old Trafford! 🏟️ Saksikan keajaiban sepak bola di stadion paling ikonik. #ManUnited #Football #Shorts"
+    elif "masjid" in topic_lower or "makkah" in topic_lower:
+        title = "Keindahan Masjidil Haram 🕌 #Shorts"
+        desc = "Saksikan kemegahan rumah Allah yang penuh berkah. Subhanallah! 💫 #Islam #Makkah #Shorts"
+    elif "japan" in topic_lower or "tokyo" in topic_lower:
+        title = "Tokyo Aesthetic ✨ #Shorts"
+        desc = "Keajaiban Jepang yang memukau mata. Modern dan tradisional berpadu indah. 🗾 #Japan #Travel #Shorts"
+    elif "kyoto" in topic_lower:
+        title = "Kyoto Culture 🏮 #Shorts"
+        desc = "Jelajahi keindahan budaya Kyoto yang abadi. Setiap detail berbicara sejarah. 🌸 #Kyoto #Japan #Shorts"
+    else:
+        title = f"{topic} Amazing Content 🎬 #Shorts"
+        desc = f"Jangan lewatkan keindahan {topic}! Subscribe untuk lebih banyak konten menarik. 🌟 #Shorts #Content"
+    
+    return title, desc
+
 def generate_caption(topic):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return f"{topic} #Shorts", "Enjoy the vibes! #Shorts #Video"
+        print(f"   ⚠️ GEMINI_API_KEY tidak ditemukan, gunakan caption fallback")
+        return get_manual_caption(topic)
     
     genai.configure(api_key=api_key)
     
@@ -34,13 +57,13 @@ def generate_caption(topic):
         
         if not chosen_model:
             print("   ⚠️ Tidak ada model yang tersedia, gunakan fallback")
-            return f"{topic} #Shorts", "Enjoy the vibes! #Shorts #Video"
+            return get_manual_caption(topic)
         
         print(f"   Using model: {chosen_model}")
         model = genai.GenerativeModel(chosen_model)
     except Exception as e:
         print(f"   ⚠️ Error detect model: {e}, gunakan fallback")
-        return f"{topic} #Shorts", "Enjoy the vibes! #Shorts #Video"
+        return get_manual_caption(topic)
     
     prompt = f"""
     Kamu adalah expert YouTube Shorts. Buatkan Metadata untuk video pendek tentang: "{topic}".
@@ -61,10 +84,15 @@ def generate_caption(topic):
         response = model.generate_content(prompt)
         text = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(text)
+        print(f"   ✅ Caption generated successfully")
         return data['title'], data['description']
     except Exception as e:
-        print(f"   ⚠️ Generate caption error: {e}")
-        return f"{topic} #Shorts", "Enjoy the vibes! #Shorts #Video"
+        error_msg = str(e).lower()
+        if "quota" in error_msg or "429" in error_msg:
+            print(f"   ⚠️ Gemini quota exceeded, gunakan caption fallback")
+        else:
+            print(f"   ⚠️ Generate caption error: {e}")
+        return get_manual_caption(topic)
 
 def upload_video(file_path, topic):
     title, desc = generate_caption(topic)
