@@ -3,9 +3,8 @@ google-auth-oauthlib
 google-auth-httplib2
 requests
 moviepy==1.0.3
-decorator==4.4.2
-google-generativeai>=0.7.2
-Pillow==9.5.0
-numpy
-imageio==2.4.1
-imageio-ffmpeg==0.4.2
+imageio<3.0
+decorator<5.0
+Pillow<10.0.0
+numpy<2.0.0
+google-generativeai
